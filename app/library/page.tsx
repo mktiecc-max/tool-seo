@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Article, ArticleStatus, STATUS_BADGE } from '@/types';
 import { Library, Search, Filter, Loader2, Trash2, Send, ExternalLink, RefreshCw, AlertCircle, CheckSquare, Play } from 'lucide-react';
@@ -44,14 +44,22 @@ const STATUS_LABEL: Record<ArticleStatus, string> = {
 
 export default function LibraryPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>((searchParams.get('tab') as Tab) || 'all');
+  const [activeTab, setActiveTab] = useState<Tab>('all');
   const [search, setSearch] = useState('');
   const [aiFilter, setAiFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPublishing, setBulkPublishing] = useState(false);
+
+  // Đọc tab từ URL params khi mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') as Tab;
+    if (tab && TAB_CONFIG.some((t) => t.id === tab)) {
+      setActiveTab(tab);
+    }
+  }, []);
   const [bulkResult, setBulkResult] = useState<{ success: number; failed: number } | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; label: string } | null>(null);

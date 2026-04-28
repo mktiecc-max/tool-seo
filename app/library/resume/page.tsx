@@ -1,21 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Article } from '@/types';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import BatchBoard from '@/components/articles/BatchBoard';
 
 export default function LibraryResumePage() {
-  const searchParams = useSearchParams();
   const router = useRouter();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const idsParam = searchParams.get('ids');
+    const params = new URLSearchParams(window.location.search);
+    const idsParam = params.get('ids');
+
     if (!idsParam) {
       setError('Không có bài nào được chọn');
       setLoading(false);
@@ -39,7 +40,7 @@ export default function LibraryResumePage() {
         else { setArticles((data as Article[]) || []); }
         setLoading(false);
       });
-  }, [searchParams]);
+  }, []);
 
   if (loading) {
     return (
@@ -65,7 +66,6 @@ export default function LibraryResumePage() {
 
   return (
     <div className="p-6 flex flex-col h-screen">
-      {/* Back button */}
       <button
         onClick={() => router.push('/library')}
         className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors mb-4 shrink-0 w-fit"
@@ -73,7 +73,6 @@ export default function LibraryResumePage() {
         <ArrowLeft size={16} /> Quay lại Content Library
       </button>
 
-      {/* BatchBoard với các bài đã chọn */}
       <div className="flex-1 min-h-0">
         <BatchBoard initialArticles={articles} />
       </div>
