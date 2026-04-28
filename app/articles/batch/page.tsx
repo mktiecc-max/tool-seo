@@ -21,9 +21,12 @@ export default async function BatchPage({ searchParams }: Props) {
 
   if (error || !data || data.length === 0) notFound();
 
+  // Sheet URL from env (set NEXT_PUBLIC_GOOGLE_SHEET_URL in Vercel)
+  const sheetUrl = process.env.NEXT_PUBLIC_GOOGLE_SHEET_URL || undefined;
+
   return (
     <div className="p-8 h-screen flex flex-col overflow-hidden">
-      <BatchBoard initialArticles={data as Article[]} />
+      <BatchBoard initialArticles={data as Article[]} sheetUrl={sheetUrl} />
     </div>
   );
 }
