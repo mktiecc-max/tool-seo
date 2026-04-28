@@ -97,6 +97,8 @@ export default function Step1Config({ article, initialKeyword, initialKeywordId,
     setBatchProgress({ done: 0, total: parsedBatchKeywords.length });
     let done = 0;
     const errors: string[] = [];
+    const articleIds: string[] = [];
+
     for (const kw of parsedBatchKeywords) {
       try {
         const res = await fetch('/api/articles/generate-outline', {
@@ -105,7 +107,11 @@ export default function Step1Config({ article, initialKeyword, initialKeywordId,
           body: JSON.stringify(buildPayload(kw)),
         });
         const json = await res.json();
-        if (!res.ok) errors.push(`"${kw}": ${json.error || 'thất bại'}`);
+        if (!res.ok) {
+          errors.push(`"${kw}": ${json.error || 'thất bại'}`);
+        } else if (json.article_id) {
+          articleIds.push(json.article_id);
+        }
       } catch (e: unknown) {
         errors.push(`"${kw}": ${(e as Error).message}`);
       }
@@ -113,8 +119,18 @@ export default function Step1Config({ article, initialKeyword, initialKeywordId,
       setBatchProgress({ done, total: parsedBatchKeywords.length });
     }
     setLoading(false);
-    if (errors.length > 0) setError(`Một số bài lỗi:\n${errors.join('\n')}`);
-    router.push('/articles');
+
+    if (errors.length > 0 && articleIds.length === 0) {
+      setError(`Tạo outline thất bại:\n${errors.join('\n')}`);
+      return;
+    }
+
+    // Redirect to batch board with collected IDs
+    if (articleIds.length > 0) {
+      router.push(`/articles/batch?ids=${articleIds.join(',')}`);
+    } else {
+      setError('Không tạo được bài nào');
+    }
   };
 
   return (

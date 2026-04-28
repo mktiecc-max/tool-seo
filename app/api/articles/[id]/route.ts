@@ -26,7 +26,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       status?: ArticleStatus;
     } = await req.json();
 
-    // Only update fields that are provided
     const updatePayload: Record<string, unknown> = {};
     if (body.content_html !== undefined) updatePayload.content_html = body.content_html;
     if (body.meta_title !== undefined) updatePayload.meta_title = body.meta_title;
@@ -40,11 +39,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const db = createServerClient();
-    const { error } = await db
-      .from('articles')
-      .update(updatePayload)
-      .eq('id', params.id);
+    const { error } = await db.from('articles').update(updatePayload).eq('id', params.id);
+    if (error) throw new Error(error.message);
+    return NextResponse.json({ ok: true });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
 
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  try {
+    const db = createServerClient();
+    const { error } = await db.from('articles').delete().eq('id', params.id);
     if (error) throw new Error(error.message);
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
