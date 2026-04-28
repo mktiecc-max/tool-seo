@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Article, ArticleStatus, STATUS_BADGE } from '@/types';
-import { Library, Search, Filter, Loader2, Trash2, Send, ExternalLink, RefreshCw, AlertCircle, CheckSquare } from 'lucide-react';
+import { Library, Search, Filter, Loader2, Trash2, Send, ExternalLink, RefreshCw, AlertCircle, CheckSquare, Play } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -44,9 +44,10 @@ const STATUS_LABEL: Record<ArticleStatus, string> = {
 
 export default function LibraryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('all');
+  const [activeTab, setActiveTab] = useState<Tab>((searchParams.get('tab') as Tab) || 'all');
   const [search, setSearch] = useState('');
   const [aiFilter, setAiFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -294,6 +295,23 @@ export default function LibraryPage() {
       {selected.size > 0 && (
         <div className="mb-4 flex items-center gap-3 bg-blue-950 border border-blue-800 rounded-xl px-4 py-3">
           <span className="text-sm text-blue-300 font-medium">Đã chọn {selected.size} bài</span>
+
+          {/* Tiếp tục chỉnh sửa — hiện khi có bài đang chờ duyệt */}
+          {Array.from(selected).some((id) => {
+            const art = filtered.find((a) => a.id === id);
+            return art && ['outline_review', 'content_review', 'image_review', 'ready_to_review', 'in_review', 'needs_revision'].includes(art.status);
+          }) && (
+            <button
+              onClick={() => {
+                const ids = Array.from(selected).join(',');
+                router.push(`/library/resume?ids=${ids}`);
+              }}
+              className="flex items-center gap-2 px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded-lg transition-colors font-medium"
+            >
+              <Play size={13} /> Tiếp tục chỉnh sửa
+            </button>
+          )}
+
           <button
             onClick={handleBulkPublish}
             disabled={bulkPublishing || bulkDeleting}

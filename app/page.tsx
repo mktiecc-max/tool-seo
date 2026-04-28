@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   KeyRound,
   Loader2,
@@ -63,7 +64,7 @@ export default function DashboardPage() {
       supabase
         .from('articles')
         .select('*', { count: 'exact', head: true })
-        .in('status', ['ready_to_review', 'in_review', 'needs_revision']),
+        .in('status', ['ready_to_review', 'in_review', 'needs_revision', 'outline_review', 'content_review', 'image_review']),
       supabase
         .from('articles')
         .select('*', { count: 'exact', head: true })
@@ -90,6 +91,8 @@ export default function DashboardPage() {
     return () => { supabase.removeChannel(channel); };
   }, [load]);
 
+  const router = useRouter();
+
   const statCards = [
     {
       label: 'Tổng từ khóa',
@@ -97,6 +100,7 @@ export default function DashboardPage() {
       icon: KeyRound,
       color: 'from-blue-500 to-blue-600',
       glow: 'shadow-blue-500/20',
+      href: '/keywords',
     },
     {
       label: 'Đang tạo',
@@ -105,6 +109,7 @@ export default function DashboardPage() {
       color: 'from-violet-500 to-violet-600',
       glow: 'shadow-violet-500/20',
       spin: true,
+      href: '/library?tab=generating',
     },
     {
       label: 'Chờ duyệt',
@@ -112,6 +117,7 @@ export default function DashboardPage() {
       icon: Clock,
       color: 'from-amber-500 to-orange-500',
       glow: 'shadow-amber-500/20',
+      href: '/library?tab=review',
     },
     {
       label: 'Đã đăng',
@@ -119,6 +125,7 @@ export default function DashboardPage() {
       icon: CheckCircle2,
       color: 'from-emerald-500 to-emerald-600',
       glow: 'shadow-emerald-500/20',
+      href: '/library?tab=published',
     },
   ];
 
@@ -157,8 +164,12 @@ export default function DashboardPage() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-4 gap-5 mb-8">
-        {statCards.map(({ label, value, icon: Icon, color, glow, spin }) => (
-          <div key={label} className={`glass-card rounded-2xl p-5 shadow-xl ${glow}`}>
+        {statCards.map(({ label, value, icon: Icon, color, glow, spin, href }) => (
+          <button
+            key={label}
+            onClick={() => router.push(href)}
+            className={`glass-card rounded-2xl p-5 shadow-xl ${glow} text-left w-full hover:scale-[1.02] transition-transform duration-200 cursor-pointer`}
+          >
             <div className="flex items-center justify-between mb-4">
               <div className={`w-10 h-10 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center shadow-lg`}>
                 <Icon size={18} className={`text-white ${spin && loading ? 'animate-spin' : ''}`} />
@@ -169,7 +180,7 @@ export default function DashboardPage() {
               {loading ? <span className="text-gray-600">—</span> : value.toLocaleString('vi-VN')}
             </p>
             <p className="text-gray-400 text-sm">{label}</p>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -249,7 +260,7 @@ export default function DashboardPage() {
             </thead>
             <tbody>
               {recentArticles.map((article) => {
-                const isReviewable = ['ready_to_review', 'in_review', 'needs_revision'].includes(article.status);
+                const isReviewable = ['ready_to_review', 'in_review', 'needs_revision', 'outline_review', 'content_review', 'image_review'].includes(article.status);
                 return (
                   <tr key={article.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
                     <td className="px-6 py-3.5">
@@ -278,11 +289,11 @@ export default function DashboardPage() {
                           href={`/library/${article.id}`}
                           className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium"
                         >
-                          Review →
+                          Tiếp tục →
                         </Link>
                       ) : (
                         <Link
-                          href={`/articles/${article.id}`}
+                          href={`/library`}
                           className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
                         >
                           Xem →
