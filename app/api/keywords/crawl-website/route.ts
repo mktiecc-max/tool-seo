@@ -73,7 +73,7 @@ async function getUrlsFromSitemap(origin: string, maxUrls: number): Promise<stri
     if (collected.size > 0) break; // found valid sitemap, stop trying
   }
 
-  return [...collected].slice(0, maxUrls);
+  return Array.from(collected).slice(0, maxUrls);
 }
 
 /* ─── internal link spider ─── */
@@ -101,7 +101,7 @@ async function spiderSite(origin: string, maxUrls: number): Promise<string[]> {
     });
   }
 
-  return [...visited];
+  return Array.from(visited);
 }
 
 /* ─── per-page keyword extractor ─── */
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Sort by frequency desc
-    const keywordList = [...allKeywords.entries()]
+    const keywordList = Array.from(allKeywords.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([keyword, count]) => ({ keyword, count }));
 
