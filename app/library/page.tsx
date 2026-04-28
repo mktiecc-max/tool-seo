@@ -18,7 +18,7 @@ const TAB_CONFIG: { id: Tab; label: string; statuses: ArticleStatus[] }[] = [
     label: 'Đang tạo',
     statuses: ['configuring', 'generating_outline', 'generating_content', 'generating_image'],
   },
-  { id: 'review', label: 'Chờ duyệt', statuses: ['ready_to_review', 'in_review'] },
+  { id: 'review', label: 'Chờ duyệt', statuses: ['ready_to_review', 'in_review', 'outline_review', 'content_review', 'image_review'] },
   { id: 'revision', label: 'Cần sửa', statuses: ['needs_revision'] },
   { id: 'scheduled', label: 'Đã lên lịch', statuses: ['done'] },
   { id: 'published', label: 'Đã đăng', statuses: ['done'] },
@@ -166,7 +166,7 @@ export default function LibraryPage() {
     await loadArticles();
   };
 
-  const pendingCount = articles.filter((a) => ['ready_to_review', 'in_review'].includes(a.status)).length;
+  const pendingCount = articles.filter((a) => ['ready_to_review', 'in_review', 'outline_review', 'content_review', 'image_review'].includes(a.status)).length;
   const generatingCount = articles.filter((a) =>
     ['configuring', 'generating_outline', 'generating_content', 'generating_image'].includes(a.status)
   ).length;
@@ -227,7 +227,7 @@ export default function LibraryPage() {
           const count = tab.id === 'all'
             ? articles.length
             : tab.id === 'review'
-            ? articles.filter((a) => ['ready_to_review', 'in_review'].includes(a.status)).length
+            ? articles.filter((a) => ['ready_to_review', 'in_review', 'outline_review', 'content_review', 'image_review'].includes(a.status)).length
             : tab.id === 'revision'
             ? articles.filter((a) => a.status === 'needs_revision').length
             : tab.id === 'generating'
@@ -357,7 +357,16 @@ export default function LibraryPage() {
             <tbody>
               {filtered.map((article) => {
                 const isGenerating = ['configuring', 'generating_outline', 'generating_content', 'generating_image'].includes(article.status);
-                const isReviewable = ['ready_to_review', 'in_review', 'needs_revision'].includes(article.status);
+                const isReviewable = [
+                  'ready_to_review', 'in_review', 'needs_revision',
+                  'outline_review', 'content_review', 'image_review',
+                ].includes(article.status);
+                const reviewLabel =
+                  article.status === 'needs_revision' ? 'Sửa lại' :
+                  article.status === 'outline_review' ? 'Duyệt outline' :
+                  article.status === 'content_review' ? 'Duyệt nội dung' :
+                  article.status === 'image_review' ? 'Duyệt ảnh' :
+                  'Review';
 
                 return (
                   <tr
@@ -430,7 +439,7 @@ export default function LibraryPage() {
                             href={`/library/${article.id}`}
                             className="text-xs bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 px-3 py-1.5 rounded-lg transition-colors font-medium"
                           >
-                            {article.status === 'needs_revision' ? 'Sửa lại' : 'Review'}
+                            {reviewLabel}
                           </Link>
                         )}
                         {isGenerating && (

@@ -5,6 +5,7 @@ import { KeyRound } from 'lucide-react';
 import ManualImport from '@/components/keywords/ManualImport';
 import CompetitorCrawl from '@/components/keywords/CompetitorCrawl';
 import SerpCrawl from '@/components/keywords/SerpCrawl';
+import WebsiteCrawl from '@/components/keywords/WebsiteCrawl';
 import KeywordsTable from '@/components/keywords/KeywordsTable';
 import BatchCreateModal from '@/components/keywords/BatchCreateModal';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ import { cn } from '@/lib/utils';
 const tabs = [
   { id: 'manual', label: '📋 Từ khóa có sẵn' },
   { id: 'competitor', label: '🔍 Crawl URL đối thủ' },
+  { id: 'website', label: '🕷️ Crawl toàn website' },
   { id: 'serp', label: '🌐 Crawl Google SERP' },
 ];
 
@@ -60,6 +62,7 @@ export default function KeywordsPage() {
       <div className="glass-card rounded-2xl p-6 mb-6">
         {activeTab === 'manual' && <ManualImport onImported={onImported} />}
         {activeTab === 'competitor' && <CompetitorCrawl onImported={onImported} />}
+        {activeTab === 'website' && <WebsiteCrawl onImported={onImported} />}
         {activeTab === 'serp' && <SerpCrawl onImported={onImported} />}
       </div>
 

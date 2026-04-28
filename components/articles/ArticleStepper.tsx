@@ -49,7 +49,9 @@ export default function ArticleStepper({
   initialKeywordId,
   onArticleUpdate,
 }: Props) {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(
+    existingArticle ? statusToStep(existingArticle.status) : 0
+  );
   const [article, setArticle] = useState<Article | null>(existingArticle);
 
   useEffect(() => {
