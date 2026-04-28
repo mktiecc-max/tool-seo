@@ -178,7 +178,7 @@ export default function BatchCard({ article: initialArticle, onUpdate, onDelete 
 
   return (
     <div className={cn(
-      'rounded-2xl border-2 p-5 flex flex-col gap-4 min-w-[420px] w-[440px] shrink-0 transition-all',
+      'rounded-2xl border-2 p-5 flex flex-col gap-4 flex-1 min-w-[300px] transition-all',
       STEP_COLOR[article.status] || 'border-gray-700 bg-gray-800/30'
     )}>
       {/* Header */}
@@ -217,7 +217,7 @@ export default function BatchCard({ article: initialArticle, onUpdate, onDelete 
             {showOutline ? 'Ẩn outline' : 'Xem outline'}
           </button>
           {showOutline && (
-            <div className="bg-gray-900/60 rounded-xl p-3 border border-gray-800 text-xs space-y-1.5 max-h-[420px] overflow-y-auto">
+            <div className="bg-gray-900/60 rounded-xl p-3 border border-gray-800 text-xs space-y-1.5 max-h-[40vh] overflow-y-auto">
               <p className="font-bold text-white text-sm leading-tight mb-2">{outline.h1}</p>
               {outline.sections?.map((s, i) => (
                 <div key={i} className="pb-1.5 border-b border-gray-800/60 last:border-0">
@@ -254,7 +254,7 @@ export default function BatchCard({ article: initialArticle, onUpdate, onDelete 
             </div>
             {showContent && article.content_html && (
               <div
-                className="text-xs text-gray-300 max-h-[480px] overflow-y-auto prose prose-sm prose-invert leading-relaxed"
+                className="text-xs text-gray-300 max-h-[50vh] overflow-y-auto prose prose-sm prose-invert leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: article.content_html }}
               />
             )}
