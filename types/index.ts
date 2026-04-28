@@ -108,6 +108,10 @@ export interface Settings {
   default_ai_model?: AIModel;
   default_image_ai?: ImageAI;
   max_concurrent_jobs: number;  // default 3
+  // Model versions (tùy chọn — dùng default nếu không chọn)
+  openai_model?: string;      // e.g. 'gpt-4o', 'gpt-4o-mini', 'o4-mini'
+  gemini_model?: string;      // e.g. 'gemini-2.0-flash', 'gemini-2.5-pro'
+  anthropic_model?: string;   // e.g. 'claude-opus-4-5', 'claude-3-5-sonnet-20241022'
 }
 
 // ---- Outline ----

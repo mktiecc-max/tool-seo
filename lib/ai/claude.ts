@@ -11,21 +11,25 @@ export async function callClaude(
   apiKey: string,
   prompt: string,
   system?: string,
-  stream?: false
+  stream?: false,
+  modelVersion?: string
 ): Promise<string>;
 export async function callClaude(
   apiKey: string,
   prompt: string,
   system: string | undefined,
-  stream: true
+  stream: true,
+  modelVersion?: string
 ): Promise<ReadableStream<Uint8Array>>;
 export async function callClaude(
   apiKey: string,
   prompt: string,
   system?: string,
-  stream?: boolean
+  stream?: boolean,
+  modelVersion?: string
 ): Promise<string | ReadableStream<Uint8Array>> {
   const client = new Anthropic({ apiKey });
+  const model = modelVersion || 'claude-opus-4-5';
 
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     try {
@@ -34,7 +38,7 @@ export async function callClaude(
         const readable = new ReadableStream<Uint8Array>({
           async start(controller) {
             const streamResponse = await client.messages.stream({
-              model: 'claude-opus-4-5',
+              model,
               max_tokens: 8192,
               system: system || 'You are a helpful assistant.',
               messages: [{ role: 'user', content: prompt }],
@@ -54,7 +58,7 @@ export async function callClaude(
       }
 
       const response = await client.messages.create({
-        model: 'claude-opus-4-5',
+        model,
         max_tokens: 8192,
         system: system || 'You are a helpful assistant.',
         messages: [{ role: 'user', content: prompt }],

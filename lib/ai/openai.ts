@@ -11,21 +11,25 @@ export async function callOpenAI(
   apiKey: string,
   prompt: string,
   system?: string,
-  stream?: false
+  stream?: false,
+  modelVersion?: string
 ): Promise<string>;
 export async function callOpenAI(
   apiKey: string,
   prompt: string,
   system: string | undefined,
-  stream: true
+  stream: true,
+  modelVersion?: string
 ): Promise<ReadableStream<Uint8Array>>;
 export async function callOpenAI(
   apiKey: string,
   prompt: string,
   system?: string,
-  stream?: boolean
+  stream?: boolean,
+  modelVersion?: string
 ): Promise<string | ReadableStream<Uint8Array>> {
   const client = new OpenAI({ apiKey });
+  const model = modelVersion || 'gpt-4o';
 
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     try {
@@ -34,7 +38,7 @@ export async function callOpenAI(
         const readable = new ReadableStream<Uint8Array>({
           async start(controller) {
             const streamResponse = await client.chat.completions.create({
-              model: 'gpt-4o',
+              model,
               stream: true,
               messages: [
                 { role: 'system', content: system || 'You are a helpful assistant.' },
@@ -52,7 +56,7 @@ export async function callOpenAI(
       }
 
       const response = await client.chat.completions.create({
-        model: 'gpt-4o',
+        model,
         messages: [
           { role: 'system', content: system || 'You are a helpful assistant.' },
           { role: 'user', content: prompt },

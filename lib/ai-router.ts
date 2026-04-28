@@ -13,13 +13,13 @@ export async function callAI(
   switch (model) {
     case 'claude':
       if (!settings.anthropic_api_key) throw new Error('Anthropic API key chưa được cấu hình');
-      return callClaude(settings.anthropic_api_key, prompt, system);
+      return callClaude(settings.anthropic_api_key, prompt, system, false, settings.anthropic_model);
     case 'gpt4o':
       if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
-      return callOpenAI(settings.openai_api_key, prompt, system);
+      return callOpenAI(settings.openai_api_key, prompt, system, false, settings.openai_model);
     case 'gemini':
       if (!settings.gemini_api_key) throw new Error('Gemini API key chưa được cấu hình');
-      return callGemini(settings.gemini_api_key, prompt, system);
+      return callGemini(settings.gemini_api_key, prompt, system, settings.gemini_model);
     default:
       throw new Error(`AI model không hợp lệ: ${model}`);
   }
@@ -34,14 +34,13 @@ export async function callAIStream(
   switch (model) {
     case 'claude':
       if (!settings.anthropic_api_key) throw new Error('Anthropic API key chưa được cấu hình');
-      return callClaude(settings.anthropic_api_key, prompt, system, true);
+      return callClaude(settings.anthropic_api_key, prompt, system, true, settings.anthropic_model);
     case 'gpt4o':
       if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
-      return callOpenAI(settings.openai_api_key, prompt, system, true);
+      return callOpenAI(settings.openai_api_key, prompt, system, true, settings.openai_model);
     case 'gemini':
-      // Gemini doesn't support streaming yet in this setup, fallback to non-streaming
       if (!settings.gemini_api_key) throw new Error('Gemini API key chưa được cấu hình');
-      const text = await callGemini(settings.gemini_api_key, prompt, system);
+      const text = await callGemini(settings.gemini_api_key, prompt, system, settings.gemini_model);
       const encoder = new TextEncoder();
       return new ReadableStream({
         start(controller) {
@@ -53,3 +52,4 @@ export async function callAIStream(
       throw new Error(`AI model không hợp lệ: ${model}`);
   }
 }
+

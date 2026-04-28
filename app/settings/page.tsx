@@ -13,6 +13,28 @@ type FieldDef = {
   testable?: boolean;
 };
 
+// Danh sách model versions cho từng provider
+const MODEL_OPTIONS = {
+  openai: [
+    { value: 'gpt-4o',          label: 'GPT-4o (mặc định, đa năng)' },
+    { value: 'gpt-4o-mini',     label: 'GPT-4o Mini (nhanh, rẻ hơn)' },
+    { value: 'o4-mini',         label: 'o4-mini (reasoning)' },
+    { value: 'o3',              label: 'o3 (reasoning mạnh nhất)' },
+  ],
+  gemini: [
+    { value: 'gemini-2.0-flash',   label: 'Gemini 2.0 Flash (mặc định, miễn phí)' },
+    { value: 'gemini-2.5-pro',     label: 'Gemini 2.5 Pro (mạnh nhất, có phí)' },
+    { value: 'gemini-2.5-flash',   label: 'Gemini 2.5 Flash (cân bằng)' },
+    { value: 'gemini-1.5-flash',   label: 'Gemini 1.5 Flash (cũ, ổn định)' },
+  ],
+  anthropic: [
+    { value: 'claude-opus-4-5',              label: 'Claude Opus 4.5 (mặc định, mạnh nhất)' },
+    { value: 'claude-3-5-sonnet-20241022',   label: 'Claude 3.5 Sonnet (nhanh, cân bằng)' },
+    { value: 'claude-3-5-haiku-20241022',    label: 'Claude 3.5 Haiku (nhanh nhất, rẻ nhất)' },
+    { value: 'claude-3-opus-20240229',       label: 'Claude 3 Opus (cũ, mạnh)' },
+  ],
+};
+
 const fieldGroups: { title: string; fields: FieldDef[] }[] = [
   {
     title: '🤖 AI API Keys',
@@ -190,6 +212,56 @@ export default function SettingsPage() {
             </div>
           </div>
         ))}
+
+        {/* AI Model Versions */}
+        <div className="glass-card rounded-2xl p-6">
+          <h2 className="font-semibold text-white mb-1">🎛️ Phiên bản Model</h2>
+          <p className="text-xs text-gray-500 mb-5">Chọn phiên bản cụ thể cho từng AI. Để trống = dùng mặc định.</p>
+          <div className="space-y-4">
+            {/* OpenAI model */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">OpenAI Model</label>
+              <select
+                value={settings.openai_model || ''}
+                onChange={(e) => setSettings((p) => ({ ...p, openai_model: e.target.value || undefined }))}
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">-- Dùng mặc định (gpt-4o) --</option>
+                {MODEL_OPTIONS.openai.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            {/* Gemini model */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">Gemini Model</label>
+              <select
+                value={settings.gemini_model || ''}
+                onChange={(e) => setSettings((p) => ({ ...p, gemini_model: e.target.value || undefined }))}
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">-- Dùng mặc định (gemini-2.0-flash) --</option>
+                {MODEL_OPTIONS.gemini.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            {/* Anthropic model */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">Claude Model</label>
+              <select
+                value={settings.anthropic_model || ''}
+                onChange={(e) => setSettings((p) => ({ ...p, anthropic_model: e.target.value || undefined }))}
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">-- Dùng mặc định (claude-opus-4-5) --</option>
+                {MODEL_OPTIONS.anthropic.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
 
         {/* Default AI */}
         <div className="glass-card rounded-2xl p-6">

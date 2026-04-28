@@ -9,11 +9,12 @@ async function sleep(ms: number) {
 export async function callGemini(
   apiKey: string,
   prompt: string,
-  systemInstruction?: string
+  systemInstruction?: string,
+  modelVersion?: string
 ): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: modelVersion || 'gemini-2.0-flash',
     ...(systemInstruction ? { systemInstruction } : {}),
   });
 
