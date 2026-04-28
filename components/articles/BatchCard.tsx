@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 
 interface Props {
   article: Article;
+  selected?: boolean;
+  onToggleSelect?: () => void;
   onUpdate: (updated: Article) => void;
   onDelete: (id: string) => void;
 }
@@ -37,7 +39,7 @@ const STEP_COLOR: Record<string, string> = {
   failed: 'border-red-700/60 bg-red-950/20',
 };
 
-export default function BatchCard({ article: initialArticle, onUpdate, onDelete }: Props) {
+export default function BatchCard({ article: initialArticle, selected = false, onToggleSelect, onUpdate, onDelete }: Props) {
   const [article, setArticle] = useState<Article>(initialArticle);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -183,6 +185,18 @@ export default function BatchCard({ article: initialArticle, onUpdate, onDelete 
     )}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
+        {/* Checkbox */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
+          className={cn(
+            'mt-0.5 w-5 h-5 shrink-0 rounded border-2 flex items-center justify-center transition-all',
+            selected
+              ? 'border-blue-500 bg-blue-600'
+              : 'border-gray-600 bg-transparent hover:border-gray-400'
+          )}
+        >
+          {selected && <span className="text-white text-xs font-bold leading-none">✓</span>}
+        </button>
         <div className="flex-1 min-w-0">
           <p className="text-xs text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Từ khóa</p>
           <p className="text-sm font-bold text-white leading-tight truncate" title={article.keyword}>
