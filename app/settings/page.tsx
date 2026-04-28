@@ -47,7 +47,11 @@ export default function SettingsPage() {
   }, []);
 
   async function loadSettings() {
-    const { data } = await supabase.from('settings').select('*').limit(1).single();
+    const { data, error } = await supabase.from('settings').select('*').limit(1).single();
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 = no rows found (bình thường khi chưa có settings)
+      setError(`Lỗi kết nối Supabase: ${error.message}`);
+    }
     if (data) setSettings(data);
   }
 
@@ -56,12 +60,32 @@ export default function SettingsPage() {
     setError('');
     setSaved(false);
     try {
-      const existing = await supabase.from('settings').select('id').limit(1).single();
-      if (existing.data?.id) {
-        await supabase.from('settings').update(settings).eq('id', existing.data.id);
-      } else {
-        await supabase.from('settings').insert(settings);
+      // Check existing row
+      const { data: existing, error: selectErr } = await supabase
+        .from('settings')
+        .select('id')
+        .limit(1)
+        .single();
+
+      if (selectErr && selectErr.code !== 'PGRST116') {
+        throw new Error(`Không thể kết nối Supabase: ${selectErr.message}`);
       }
+
+      if (existing?.id) {
+        // Update
+        const { error: updateErr } = await supabase
+          .from('settings')
+          .update(settings)
+          .eq('id', existing.id);
+        if (updateErr) throw new Error(`Lỗi cập nhật: ${updateErr.message}`);
+      } else {
+        // Insert
+        const { error: insertErr } = await supabase
+          .from('settings')
+          .insert(settings);
+        if (insertErr) throw new Error(`Lỗi lưu mới: ${insertErr.message}`);
+      }
+
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e: unknown) {
