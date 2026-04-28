@@ -42,7 +42,7 @@ export default function BatchCard({ article: initialArticle, onUpdate, onDelete 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showOutline, setShowOutline] = useState(true);
-  const [showContent, setShowContent] = useState(false);
+  const [showContent, setShowContent] = useState(true);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -178,7 +178,7 @@ export default function BatchCard({ article: initialArticle, onUpdate, onDelete 
 
   return (
     <div className={cn(
-      'rounded-2xl border-2 p-5 flex flex-col gap-4 min-w-[300px] w-[340px] shrink-0 transition-all',
+      'rounded-2xl border-2 p-5 flex flex-col gap-4 min-w-[420px] w-[440px] shrink-0 transition-all',
       STEP_COLOR[article.status] || 'border-gray-700 bg-gray-800/30'
     )}>
       {/* Header */}
@@ -217,13 +217,13 @@ export default function BatchCard({ article: initialArticle, onUpdate, onDelete 
             {showOutline ? 'Ẩn outline' : 'Xem outline'}
           </button>
           {showOutline && (
-            <div className="bg-gray-900/60 rounded-xl p-3 border border-gray-800 text-xs space-y-1.5 max-h-52 overflow-y-auto">
-              <p className="font-bold text-white text-sm leading-tight">{outline.h1}</p>
+            <div className="bg-gray-900/60 rounded-xl p-3 border border-gray-800 text-xs space-y-1.5 max-h-[420px] overflow-y-auto">
+              <p className="font-bold text-white text-sm leading-tight mb-2">{outline.h1}</p>
               {outline.sections?.map((s, i) => (
-                <div key={i}>
-                  <p className="text-amber-400 font-medium">H2: {s.h2}</p>
+                <div key={i} className="pb-1.5 border-b border-gray-800/60 last:border-0">
+                  <p className="text-amber-400 font-semibold">H2: {s.h2}</p>
                   {s.h3s?.map((h3, j) => (
-                    <p key={j} className="text-gray-500 pl-3">↳ {h3}</p>
+                    <p key={j} className="text-gray-500 pl-3 leading-relaxed">↳ {h3}</p>
                   ))}
                 </div>
               ))}
@@ -234,27 +234,28 @@ export default function BatchCard({ article: initialArticle, onUpdate, onDelete 
 
       {/* CONTENT REVIEW */}
       {article.status === 'content_review' && (
-        <div className="space-y-2">
-          <div className="bg-gray-900/60 rounded-xl p-3 border border-gray-800">
-            <div className="flex items-center gap-2 mb-1">
-              <FileText size={12} className="text-violet-400" />
-              <span className="text-xs text-gray-400">
+        <div className="space-y-2 flex-1 min-h-0">
+          <div className="bg-gray-900/60 rounded-xl p-3 border border-gray-800 flex flex-col">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText size={12} className="text-violet-400 shrink-0" />
+              <span className="text-xs text-gray-400 font-medium">
                 ~{article.word_count?.toLocaleString() || '?'} từ
               </span>
               {article.meta_title && (
-                <span className="text-xs text-gray-600 truncate max-w-[140px]">{article.meta_title}</span>
+                <span className="text-xs text-gray-500 truncate" title={article.meta_title}>{article.meta_title}</span>
               )}
+              <button
+                onClick={() => setShowContent((v) => !v)}
+                className="ml-auto text-xs text-violet-400 hover:text-violet-300 transition-colors shrink-0 flex items-center gap-1"
+              >
+                {showContent ? <EyeOff size={11} /> : <Eye size={11} />}
+                {showContent ? 'Ẩn' : 'Xem'}
+              </button>
             </div>
-            <button
-              onClick={() => setShowContent((v) => !v)}
-              className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
-            >
-              {showContent ? 'Ẩn preview' : 'Xem preview'}
-            </button>
             {showContent && article.content_html && (
               <div
-                className="mt-2 text-xs text-gray-400 max-h-40 overflow-y-auto prose prose-sm prose-invert"
-                dangerouslySetInnerHTML={{ __html: article.content_html.substring(0, 2000) + '...' }}
+                className="text-xs text-gray-300 max-h-[480px] overflow-y-auto prose prose-sm prose-invert leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: article.content_html }}
               />
             )}
           </div>
