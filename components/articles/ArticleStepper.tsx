@@ -55,7 +55,9 @@ export default function ArticleStepper({
   useEffect(() => {
     if (existingArticle) {
       setArticle(existingArticle);
-      setCurrentStep(statusToStep(existingArticle.status));
+      // Chỉ advance step, không bao giờ lùi lại (tránh override nextStep())
+      const mappedStep = statusToStep(existingArticle.status);
+      setCurrentStep((prev) => Math.max(prev, mappedStep));
     }
   }, [existingArticle]);
 
