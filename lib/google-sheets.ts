@@ -15,7 +15,7 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 function base64url(data: string | ArrayBuffer): string {
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
-  let b64 = Buffer.from(bytes).toString('base64');
+  const b64 = Buffer.from(bytes).toString('base64');
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
