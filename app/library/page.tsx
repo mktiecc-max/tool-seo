@@ -52,6 +52,9 @@ export default function LibraryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPublishing, setBulkPublishing] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ success: number; failed: number } | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; label: string } | null>(null);
+  const [deleteResult, setDeleteResult] = useState<{ count: number } | null>(null);
 
   const loadArticles = useCallback(async () => {
     const { data } = await supabase
@@ -130,6 +133,28 @@ export default function LibraryPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (!deleteConfirm) return;
+    setBulkDeleting(true);
+    let deleted = 0;
+    for (const id of deleteConfirm.ids) {
+      const res = await fetch(`/api/articles/${id}`, { method: 'DELETE' });
+      if (res.ok) deleted++;
+    }
+    setBulkDeleting(false);
+    setDeleteConfirm(null);
+    setSelected(new Set());
+    setDeleteResult({ count: deleted });
+    await loadArticles();
+  };
+
+  const handleDeleteOne = (article: Article) => {
+    setDeleteConfirm({
+      ids: [article.id],
+      label: `"${article.keyword}"`,
+    });
+  };
+
   const handleRetry = async (article_id: string) => {
     const db = supabase;
     await db.from('article_jobs').insert({ article_id, status: 'queued' });
@@ -170,6 +195,17 @@ export default function LibraryPage() {
           <RefreshCw size={14} /> Làm mới
         </button>
       </div>
+
+      {/* Delete result toast */}
+      {deleteResult && (
+        <div className="mb-4 bg-gray-900 border border-red-800/50 rounded-xl px-4 py-3 flex items-center gap-3">
+          <Trash2 size={16} className="text-red-400" />
+          <p className="text-sm text-gray-300">
+            Đã xóa <span className="text-red-400 font-medium">{deleteResult.count} bài</span>
+          </p>
+          <button onClick={() => setDeleteResult(null)} className="ml-auto text-gray-500 hover:text-gray-300">✕</button>
+        </div>
+      )}
 
       {/* Bulk result toast */}
       {bulkResult && (
@@ -260,15 +296,25 @@ export default function LibraryPage() {
           <span className="text-sm text-blue-300 font-medium">Đã chọn {selected.size} bài</span>
           <button
             onClick={handleBulkPublish}
-            disabled={bulkPublishing}
+            disabled={bulkPublishing || bulkDeleting}
             className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm rounded-lg transition-colors font-medium"
           >
             {bulkPublishing ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
             Đăng Draft lên WP
           </button>
           <button
+            onClick={() => setDeleteConfirm({
+              ids: Array.from(selected),
+              label: `${selected.size} bài đã chọn`,
+            })}
+            disabled={bulkPublishing || bulkDeleting}
+            className="flex items-center gap-2 px-4 py-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-sm rounded-lg transition-colors font-medium"
+          >
+            <Trash2 size={13} /> Xóa {selected.size} bài
+          </button>
+          <button
             onClick={() => setSelected(new Set())}
-            className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            className="text-sm text-blue-400 hover:text-blue-300 transition-colors ml-auto"
           >
             Bỏ chọn
           </button>
@@ -378,33 +424,45 @@ export default function LibraryPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {isReviewable && (
-                        <Link
-                          href={`/library/${article.id}`}
-                          className="text-xs bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 px-3 py-1.5 rounded-lg transition-colors font-medium"
-                        >
-                          {article.status === 'needs_revision' ? 'Sửa lại' : 'Review'}
-                        </Link>
-                      )}
-                      {isGenerating && (
-                        <span className="text-xs text-gray-600 italic">Đang tạo...</span>
-                      )}
-                      {article.status === 'done' && article.wp_post_id && (
-                        <button
-                          onClick={() => window.open(`${article.slug}`, '_blank')}
-                          className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 ml-auto transition-colors"
-                        >
-                          <ExternalLink size={11} /> Xem bài
-                        </button>
-                      )}
-                      {article.status === 'failed' && (
-                        <button
-                          onClick={() => handleRetry(article.id)}
-                          className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 ml-auto transition-colors"
-                        >
-                          <RefreshCw size={11} /> Thử lại
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {isReviewable && (
+                          <Link
+                            href={`/library/${article.id}`}
+                            className="text-xs bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                          >
+                            {article.status === 'needs_revision' ? 'Sửa lại' : 'Review'}
+                          </Link>
+                        )}
+                        {isGenerating && (
+                          <span className="text-xs text-gray-600 italic">Đang tạo...</span>
+                        )}
+                        {article.status === 'done' && article.wp_post_id && (
+                          <button
+                            onClick={() => window.open(`${article.slug}`, '_blank')}
+                            className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
+                          >
+                            <ExternalLink size={11} /> Xem bài
+                          </button>
+                        )}
+                        {article.status === 'failed' && (
+                          <button
+                            onClick={() => handleRetry(article.id)}
+                            className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                          >
+                            <RefreshCw size={11} /> Thử lại
+                          </button>
+                        )}
+                        {/* Delete button for every row */}
+                        {!isGenerating && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteOne(article); }}
+                            className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/30 rounded-lg transition-colors"
+                            title="Xóa bài"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -413,6 +471,42 @@ export default function LibraryPage() {
           </table>
         )}
       </div>
+      {/* Delete confirm modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-red-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-red-900/50 border border-red-700 rounded-xl flex items-center justify-center shrink-0">
+                <Trash2 size={18} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold">Xóa bài viết?</h3>
+                <p className="text-gray-500 text-xs mt-0.5">Hành động này không thể hoàn tác</p>
+              </div>
+            </div>
+            <p className="text-gray-400 text-sm">
+              Bạn sẽ xóa vĩnh viễn <strong className="text-white">{deleteConfirm.label}</strong>.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={bulkDeleting}
+                className="flex-1 py-2.5 text-sm text-gray-400 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 rounded-xl border border-gray-700 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="flex-1 py-2.5 text-sm text-white bg-red-700 hover:bg-red-600 disabled:opacity-50 rounded-xl transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                {bulkDeleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                {bulkDeleting ? 'Đang xóa...' : 'Xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
