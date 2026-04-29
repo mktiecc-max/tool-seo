@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { X, Zap, BookOpen, List, Star, GitCompare, Loader2 } from 'lucide-react';
 import { ArticleType, ArticleTone, AIModel, ImageAI } from '@/types';
 import { cn } from '@/lib/utils';
+import BrandKitSelector from '@/components/articles/BrandKitSelector';
 
 interface Props {
   selectedIds: string[];
@@ -49,6 +50,7 @@ export default function BatchCreateModal({ selectedIds, onClose }: Props) {
   const [hasCta, setHasCta] = useState(true);
   const [aiModel, setAiModel] = useState<AIModel>('claude');
   const [imageAI, setImageAI] = useState<ImageAI>('dalle3');
+  const [brandKitId, setBrandKitId] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -70,6 +72,7 @@ export default function BatchCreateModal({ selectedIds, onClose }: Props) {
             has_cta: hasCta,
             ai_model: aiModel,
             image_ai: imageAI,
+            brand_kit_id: brandKitId,
           },
         }),
       });
@@ -239,6 +242,9 @@ export default function BatchCreateModal({ selectedIds, onClose }: Props) {
               </div>
             </div>
           </div>
+
+          {/* Brand Kit */}
+          <BrandKitSelector value={brandKitId} onChange={setBrandKitId} />
 
           {error && (
             <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300">

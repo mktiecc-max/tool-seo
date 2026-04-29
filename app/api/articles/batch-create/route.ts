@@ -11,6 +11,7 @@ interface BatchConfig {
   has_cta: boolean;
   ai_model: AIModel;
   image_ai: ImageAI;
+  brand_kit_id?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
           has_cta: config.has_cta,
           ai_model: config.ai_model,
           image_ai: config.image_ai,
+          brand_kit_id: config.brand_kit_id || null,
           status: 'configuring',
         })
         .select('id')

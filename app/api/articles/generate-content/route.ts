@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, getSettings } from '@/lib/supabase';
 import { buildContentPrompt } from '@/lib/prompts';
 import { callAIStream } from '@/lib/ai-router';
+import { buildBrandContext } from '@/lib/brand-context';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +18,13 @@ export async function POST(req: NextRequest) {
 
     await db.from('articles').update({ status: 'generating_content' }).eq('id', article_id);
 
+    // Fetch brand kit if article has one
+    let brandSystemPrompt: string | undefined;
+    if (article.brand_kit_id) {
+      const { data: brandKit } = await db.from('brand_kits').select('*').eq('id', article.brand_kit_id).single();
+      if (brandKit) brandSystemPrompt = buildBrandContext(brandKit) || undefined;
+    }
+
     const prompt = buildContentPrompt({
       keyword: article.keyword,
       tone: article.tone,
@@ -24,7 +32,7 @@ export async function POST(req: NextRequest) {
       outline: JSON.stringify(article.outline, null, 2),
     });
 
-    const aiStream = await callAIStream(article.ai_model, prompt, settings);
+    const aiStream = await callAIStream(article.ai_model, prompt, settings, brandSystemPrompt);
 
     // Create a transform stream that collects content and saves to DB on finish
     let fullContent = '';

@@ -3,6 +3,7 @@ import { createServerClient, getSettings } from '@/lib/supabase';
 import { buildOutlinePrompt } from '@/lib/prompts';
 import { callAI } from '@/lib/ai-router';
 import { generateSlug } from '@/lib/utils';
+import { buildBrandContext } from '@/lib/brand-context';
 import { OutlineJSON, AIModel, ArticleType, ArticleTone } from '@/types';
 
 async function parseOutlineJSON(text: string): Promise<OutlineJSON> {
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
       has_faq,
       has_cta,
       ai_model,
+      brand_kit_id,
     }: {
       article_id?: string;
       keyword: string;
@@ -36,6 +38,7 @@ export async function POST(req: NextRequest) {
       has_faq: boolean;
       has_cta: boolean;
       ai_model: AIModel;
+      brand_kit_id?: string;
     } = body;
 
     if (!keyword) return NextResponse.json({ error: 'Từ khóa không được để trống' }, { status: 400 });
@@ -45,6 +48,13 @@ export async function POST(req: NextRequest) {
 
     const db = createServerClient();
 
+    // Fetch brand kit if provided
+    let brandSystemPrompt: string | undefined;
+    if (brand_kit_id) {
+      const { data: brandKit } = await db.from('brand_kits').select('*').eq('id', brand_kit_id).single();
+      if (brandKit) brandSystemPrompt = buildBrandContext(brandKit) || undefined;
+    }
+
     const prompt = buildOutlinePrompt({ keyword, article_type, h2_count, target_length, tone, has_faq, has_cta });
 
     let outline: OutlineJSON | null = null;
@@ -53,7 +63,7 @@ export async function POST(req: NextRequest) {
     // Try up to 3 times (2 retries)
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const rawText = await callAI(ai_model, prompt, settings);
+        const rawText = await callAI(ai_model, prompt, settings, brandSystemPrompt);
         outline = await parseOutlineJSON(rawText);
         break;
       } catch (e) {
@@ -95,6 +105,7 @@ export async function POST(req: NextRequest) {
           has_faq,
           has_cta,
           ai_model,
+          brand_kit_id: brand_kit_id || null,
           outline,
           meta_title: outline.meta_title,
           meta_description: outline.meta_description,

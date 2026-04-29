@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, KeyRound, FileText, Settings, Zap, Library } from 'lucide-react';
+import { LayoutDashboard, KeyRound, FileText, Settings, Zap, Library, Palette } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +11,7 @@ const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/keywords', label: 'Từ khóa', icon: KeyRound },
   { href: '/library', label: 'Content Library', icon: Library },
+  { href: '/brand-kits', label: 'Brand Kit', icon: Palette },
   { href: '/articles', label: 'Tạo bài đơn lẻ', icon: FileText },
   { href: '/settings', label: 'Cài đặt', icon: Settings },
 ];

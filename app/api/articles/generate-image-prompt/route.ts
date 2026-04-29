@@ -3,6 +3,7 @@ import { createServerClient, getSettings } from '@/lib/supabase';
 import { buildImagePromptPrompt } from '@/lib/prompts';
 import { callAI } from '@/lib/ai-router';
 import { truncate } from '@/lib/utils';
+import { buildBrandImageContext } from '@/lib/brand-context';
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +21,14 @@ export async function POST(req: NextRequest) {
       ? truncate(article.content_html.replace(/<[^>]*>/g, ''), 500)
       : '';
 
-    const prompt = buildImagePromptPrompt(article.keyword, contentSummary);
+    // Fetch brand kit for image rules
+    let brandImageContext = '';
+    if (article.brand_kit_id) {
+      const { data: brandKit } = await db.from('brand_kits').select('*').eq('id', article.brand_kit_id).single();
+      if (brandKit) brandImageContext = buildBrandImageContext(brandKit);
+    }
+
+    const prompt = buildImagePromptPrompt(article.keyword, contentSummary) + brandImageContext;
     const imagePromptText = await callAI(article.ai_model, prompt, settings);
 
     await db.from('articles').update({ image_prompt: imagePromptText.trim() }).eq('id', article_id);

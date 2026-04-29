@@ -56,6 +56,7 @@ export interface Article {
   has_faq: boolean;
   has_cta: boolean;
   ai_model: AIModel;
+  brand_kit_id?: string;    // ID của brand kit đã chọn
   outline?: OutlineJSON;
   content_html?: string;
   meta_title?: string;
@@ -229,6 +230,37 @@ export interface ArticleConfig {
   has_cta: boolean;
   ai_model: AIModel;
   image_ai: ImageAI;
+  brand_kit_id?: string;    // Brand kit đã chọn (optional)
+}
+
+// ---- Brand Kit ----
+
+export interface BrandGuideFile {
+  name: string;           // "huong-dan-thuong-hieu.md"
+  content_text: string;   // nội dung text đã upload
+  size?: number;          // bytes
+  uploaded_at?: string;   // ISO8601
+}
+
+export interface BrandKit {
+  id: string;
+  name: string;
+  description?: string;
+  // Visual identity
+  brand_colors?: string[];         // hex codes: ["#6B21A8", "#F59E0B"]
+  logo_url?: string;
+  // Writing rules
+  writing_rules?: string;          // markdown free-text
+  tone_of_voice?: string;
+  forbidden_words?: string[];
+  target_audience?: string;
+  // Image rules
+  image_style?: string;
+  image_rules?: string;
+  // Guide files
+  guide_files?: BrandGuideFile[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DashboardStats {
