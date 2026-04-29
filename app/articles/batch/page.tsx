@@ -25,7 +25,7 @@ export default async function BatchPage({ searchParams }: Props) {
   const sheetUrl = process.env.NEXT_PUBLIC_GOOGLE_SHEET_URL || undefined;
 
   return (
-    <div className="p-8 h-screen flex flex-col overflow-hidden">
+    <div className="p-8 flex flex-col">
       <BatchBoard initialArticles={data as Article[]} sheetUrl={sheetUrl} />
     </div>
   );

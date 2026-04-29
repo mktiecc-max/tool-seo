@@ -139,9 +139,13 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
     (a) => !['generating_content', 'generating_image', 'publishing'].includes(a.status)
   ).length;
 
+  // Count selected articles that can be bulk-run (outline_review)
   const bulkRunnable = articles.filter(
     (a) => selectedIds.has(a.id) && a.status === 'outline_review'
   ).length;
+
+  // Show the bulk button whenever ANY article is selected
+  const showBulkButton = selectedIds.size > 0;
 
   if (articles.length === 0) {
     return (
@@ -156,7 +160,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div className="flex items-center gap-4">
@@ -229,19 +233,21 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
           {selectedIds.size > 0 ? `Đã chọn ${selectedIds.size}/${articles.length}` : 'Chọn tất cả'}
         </button>
 
-        {selectedIds.size > 0 && (
+        {showBulkButton && (
           <>
             <div className="h-4 w-px bg-gray-700" />
-            {bulkRunnable > 0 && (
-              <button
-                onClick={handleBulkRun}
-                disabled={bulkRunning}
-                className="flex items-center gap-2 px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
-              >
-                {bulkRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-                {bulkRunning ? 'Đang chạy...' : `Duyệt & Viết ${bulkRunnable} bài`}
-              </button>
-            )}
+            <button
+              onClick={handleBulkRun}
+              disabled={bulkRunning || bulkRunnable === 0}
+              className="flex items-center gap-2 px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors"
+            >
+              {bulkRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+              {bulkRunning
+                ? 'Đang chạy...'
+                : bulkRunnable > 0
+                  ? `Duyệt & Viết ${bulkRunnable} bài`
+                  : `Duyệt & Viết ${selectedIds.size} bài`}
+            </button>
             <button
               onClick={() => setSelectedIds(new Set())}
               className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
@@ -268,8 +274,8 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
         </div>
       )}
 
-      {/* Cards — horizontal scroll */}
-      <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
+      {/* Cards — 3-column grid, vertical scroll */}
+      <div className="grid grid-cols-3 gap-4 pb-4">
         {articles.map((article) => (
           <BatchCard
             key={article.id}

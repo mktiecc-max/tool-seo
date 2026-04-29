@@ -180,7 +180,7 @@ export default function BatchCard({ article: initialArticle, selected = false, o
 
   return (
     <div className={cn(
-      'rounded-2xl border-2 p-5 flex flex-col gap-4 flex-1 min-w-[300px] transition-all',
+      'rounded-2xl border-2 p-5 flex flex-col gap-4 transition-all',
       STEP_COLOR[article.status] || 'border-gray-700 bg-gray-800/30'
     )}>
       {/* Header */}
