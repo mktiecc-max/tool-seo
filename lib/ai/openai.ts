@@ -77,13 +77,19 @@ export async function callOpenAI(
 
 export async function generateImageDALLE3(
   apiKey: string,
-  prompt: string
+  prompt: string,
+  size?: string
 ): Promise<string> {
   const client = new OpenAI({ apiKey });
+  const allowedSizes = ['1024x1024', '1792x1024', '1024x1792'] as const;
+  type DalleSize = typeof allowedSizes[number];
+  const imageSize: DalleSize = allowedSizes.includes(size as DalleSize)
+    ? (size as DalleSize)
+    : '1792x1024';
   const response = await client.images.generate({
     model: 'dall-e-3',
     prompt,
-    size: '1792x1024',
+    size: imageSize,
     quality: 'standard',
     n: 1,
   });

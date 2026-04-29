@@ -5,10 +5,11 @@ import { generateImageGemini } from '@/lib/ai/gemini';
 
 export async function POST(req: NextRequest) {
   try {
-    const { article_id, image_prompt, image_ai }: {
+    const { article_id, image_prompt, image_ai, image_size }: {
       article_id: string;
       image_prompt: string;
       image_ai: 'dalle3' | 'gemini-imagen';
+      image_size?: string;
     } = await req.json();
 
     if (!article_id || !image_prompt) {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     try {
       if (image_ai === 'dalle3') {
         if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
-        imageSourceUrl = await generateImageDALLE3(settings.openai_api_key, image_prompt);
+        imageSourceUrl = await generateImageDALLE3(settings.openai_api_key, image_prompt, image_size);
       } else {
         if (!settings.gemini_api_key) throw new Error('Gemini API key chưa được cấu hình');
         imageSourceUrl = await generateImageGemini(settings.gemini_api_key, image_prompt);

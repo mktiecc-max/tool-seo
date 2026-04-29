@@ -11,15 +11,34 @@ interface Props {
   onConfirmed: (article: Article) => void;
 }
 
+const IMAGE_SIZES = [
+  { value: '1024x1024', label: 'Vuông', sub: '1:1 · Blog / Social', icon: '■' },
+  { value: '1792x1024', label: 'Ngang', sub: '16:9 · Banner / Thumbnail', icon: '▬' },
+  { value: '1024x1792', label: 'Dọc', sub: '9:16 · Story / Poster', icon: '▮' },
+];
+
+const IMAGE_TYPES = [
+  { value: 'illustration', label: 'Ảnh minh họa', hint: 'flat illustration style, vector art' },
+  { value: 'poster', label: 'Poster', hint: 'creative poster design, bold typography' },
+  { value: 'banner', label: 'Banner', hint: 'wide banner design, professional marketing' },
+  { value: 'photo', label: 'Ảnh chụp thực', hint: 'realistic photo, high quality photography, DSLR' },
+  { value: 'infographic', label: 'Infographic', hint: 'infographic design, data visualization, clean layout' },
+  { value: 'logo', label: 'Logo / Icon', hint: 'minimal logo design, icon, transparent background' },
+];
+
 export default function Step5Image({ article, onConfirmed }: Props) {
   const [imagePrompt, setImagePrompt] = useState(article.image_prompt || '');
   const [imageAI, setImageAI] = useState<ImageAI>('dalle3');
+  const [imageSize, setImageSize] = useState('1792x1024');
+  const [imageType, setImageType] = useState('illustration');
   const [imageUrl, setImageUrl] = useState(article.image_url || '');
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
   const promptGenerated = useRef(false);
+
+  const selectedType = IMAGE_TYPES.find((t) => t.value === imageType)!;
 
   // Auto-generate prompt on mount
   useEffect(() => {
@@ -52,11 +71,18 @@ export default function Step5Image({ article, onConfirmed }: Props) {
     if (!imagePrompt.trim()) { setError('Vui lòng nhập image prompt'); return; }
     setGeneratingImage(true);
     setError('');
+    // Append image type hint to prompt
+    const finalPrompt = imagePrompt.trim() + (selectedType.hint ? `. Style: ${selectedType.hint}` : '');
     try {
       const res = await fetch('/api/articles/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ article_id: article.id, image_prompt: imagePrompt, image_ai: imageAI }),
+        body: JSON.stringify({
+          article_id: article.id,
+          image_prompt: finalPrompt,
+          image_ai: imageAI,
+          image_size: imageSize,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
@@ -150,12 +176,56 @@ export default function Step5Image({ article, onConfirmed }: Props) {
         )}
       </div>
 
-      {/* 5C: Choose AI */}
+      {/* 5C: Image Type */}
+      <div>
+        <label className="text-sm font-medium text-gray-300 block mb-3">Loại ảnh</label>
+        <div className="grid grid-cols-3 gap-2 mb-1">
+          {IMAGE_TYPES.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setImageType(t.value)}
+              className={cn(
+                'px-3 py-2.5 rounded-xl border-2 text-left transition-all',
+                imageType === t.value
+                  ? 'border-violet-500 bg-violet-500/10'
+                  : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
+              )}
+            >
+              <p className={cn('text-xs font-semibold', imageType === t.value ? 'text-violet-300' : 'text-gray-300')}>{t.label}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 5D: Image Size */}
+      <div>
+        <label className="text-sm font-medium text-gray-300 block mb-3">Kích thước ảnh</label>
+        <div className="grid grid-cols-3 gap-3">
+          {IMAGE_SIZES.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => setImageSize(s.value)}
+              className={cn(
+                'p-3 rounded-xl border-2 text-center transition-all',
+                imageSize === s.value
+                  ? 'border-blue-500 bg-blue-500/10'
+                  : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
+              )}
+            >
+              <p className="text-lg leading-none mb-1">{s.icon}</p>
+              <p className={cn('text-sm font-semibold', imageSize === s.value ? 'text-blue-300' : 'text-gray-300')}>{s.label}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{s.sub}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 5E: Choose AI */}
       <div>
         <label className="text-sm font-medium text-gray-300 block mb-3">Chọn AI tạo ảnh</label>
         <div className="grid grid-cols-2 gap-3 mb-4">
           {[
-            { value: 'dalle3' as ImageAI, label: 'DALL-E 3', sub: 'OpenAI · 1792×1024', color: 'from-emerald-500 to-teal-500' },
+            { value: 'dalle3' as ImageAI, label: 'DALL-E 3', sub: 'OpenAI · Chất lượng cao', color: 'from-emerald-500 to-teal-500' },
             { value: 'gemini-imagen' as ImageAI, label: 'Gemini Imagen', sub: 'Google · High quality', color: 'from-blue-500 to-indigo-500' },
           ].map((ai) => (
             <button
@@ -177,13 +247,19 @@ export default function Step5Image({ article, onConfirmed }: Props) {
           ))}
         </div>
 
+        {/* Preview what will be sent */}
+        <div className="mb-4 p-3 bg-gray-900/60 border border-gray-800 rounded-xl">
+          <p className="text-xs text-gray-500 mb-1">Sẽ tạo ảnh với style:</p>
+          <p className="text-xs text-gray-300 font-mono">{selectedType.label} · {IMAGE_SIZES.find(s => s.value === imageSize)?.label} ({imageSize})</p>
+        </div>
+
         <button
           onClick={generateImage}
           disabled={generatingImage || !imagePrompt.trim()}
           className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
         >
           {generatingImage ? <Loader2 size={15} className="animate-spin" /> : <ImageIcon size={15} />}
-          {generatingImage ? 'Đang tạo ảnh...' : 'Tạo ảnh'}
+          {generatingImage ? 'Đang tạo ảnh...' : `Tạo ảnh ${selectedType.label}`}
         </button>
       </div>
 
