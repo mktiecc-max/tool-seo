@@ -8,6 +8,20 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const BATCH_IMG_SIZES = [
+  { value: '1024x1024', label: 'Vuông', sub: '1:1' },
+  { value: '1792x1024', label: 'Ngang', sub: '16:9' },
+  { value: '1024x1792', label: 'Dọc', sub: '9:16' },
+];
+
+const BATCH_IMG_TYPES = [
+  { value: 'illustration', label: 'Minh họa', hint: 'flat illustration style, vector art' },
+  { value: 'photo', label: 'Ảnh thực', hint: 'realistic photo, high quality photography' },
+  { value: 'poster', label: 'Poster', hint: 'creative poster design, bold typography' },
+  { value: 'banner', label: 'Banner', hint: 'wide banner design, professional marketing' },
+  { value: 'infographic', label: 'Infographic', hint: 'infographic design, data visualization' },
+];
+
 interface Props {
   article: Article;
   selected?: boolean;
@@ -46,6 +60,8 @@ export default function BatchCard({ article: initialArticle, selected = false, o
   const [showOutline, setShowOutline] = useState(true);
   const [showContent, setShowContent] = useState(true);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [imgSize, setImgSize] = useState('1792x1024');
+  const [imgType, setImgType] = useState('illustration');
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Sync parent updates
@@ -164,13 +180,17 @@ export default function BatchCard({ article: initialArticle, selected = false, o
       prompt = json.image_prompt;
     } catch (e) { setError((e as Error).message); return; }
 
+    // Append type hint
+    const typeHint = BATCH_IMG_TYPES.find(t => t.value === imgType)?.hint || '';
+    const finalPrompt = prompt.trim() + (typeHint ? `. Style: ${typeHint}` : '');
+
     // 2. Immediately trigger image generation (fire and forget)
-    const pending = { ...a, status: 'generating_image' as const, image_prompt: prompt };
+    const pending = { ...a, status: 'generating_image' as const, image_prompt: finalPrompt };
     update(pending);
     fetch('/api/articles/generate-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ article_id: a.id, image_prompt: prompt, image_ai: 'dalle3' }),
+      body: JSON.stringify({ article_id: a.id, image_prompt: finalPrompt, image_ai: 'dalle3', image_size: imgSize }),
     }).catch((e) => setError((e as Error).message));
   };
 
@@ -371,6 +391,44 @@ export default function BatchCard({ article: initialArticle, selected = false, o
 
         {article.status === 'content_review' && (
           <>
+            {/* Image type selector */}
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400 font-medium">Loại ảnh</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {BATCH_IMG_TYPES.map((t) => (
+                  <button
+                    key={t.value}
+                    onClick={() => setImgType(t.value)}
+                    className={cn(
+                      'py-1.5 px-2 rounded-lg border text-center transition-all text-xs',
+                      imgType === t.value
+                        ? 'border-violet-500 bg-violet-500/20 text-violet-300'
+                        : 'border-gray-700 text-gray-400 hover:border-gray-600'
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 font-medium mt-2">Kích thước</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {BATCH_IMG_SIZES.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => setImgSize(s.value)}
+                    className={cn(
+                      'py-1.5 px-2 rounded-lg border text-center transition-all text-xs',
+                      imgSize === s.value
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-300'
+                        : 'border-gray-700 text-gray-400 hover:border-gray-600'
+                    )}
+                  >
+                    <span className="block font-semibold">{s.label}</span>
+                    <span className="text-gray-500">{s.sub}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <button
               onClick={() => generateImagePrompt(article)}
               disabled={loading}
