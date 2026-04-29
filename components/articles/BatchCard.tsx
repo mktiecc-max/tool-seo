@@ -149,19 +149,28 @@ export default function BatchCard({ article: initialArticle, selected = false, o
     }).catch((e) => setError((e as Error).message));
   };
 
-  const generateImagePrompt = (a: Article = article) => {
+  const generateImagePrompt = async (a: Article = article) => {
     setError('');
-    fetch('/api/articles/generate-image-prompt', {
+    // 1. Get image prompt
+    let prompt: string;
+    try {
+      const res = await fetch('/api/articles/generate-image-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_id: a.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error || 'Lỗi tạo image prompt'); return; }
+      prompt = json.image_prompt;
+    } catch (e) { setError((e as Error).message); return; }
+
+    // 2. Immediately trigger image generation (fire and forget)
+    const pending = { ...a, status: 'generating_image' as const, image_prompt: prompt };
+    update(pending);
+    fetch('/api/articles/generate-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ article_id: a.id }),
-    }).then(async (res) => {
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(json.error || 'Lỗi tạo image prompt'); return; }
-      // Fetch latest article state
-      const r2 = await fetch(`/api/articles/${a.id}`);
-      const j2 = await r2.json();
-      if (r2.ok) update(j2.article as Article);
+      body: JSON.stringify({ article_id: a.id, image_prompt: prompt, image_ai: 'dalle3' }),
     }).catch((e) => setError((e as Error).message));
   };
 

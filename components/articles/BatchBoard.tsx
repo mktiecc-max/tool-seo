@@ -88,11 +88,12 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
           });
           if (!promptRes.ok) return;
           const { image_prompt } = await promptRes.json();
+          if (!image_prompt) return;
           // Trigger image generation (fire and forget)
           fetch('/api/articles/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ article_id: a.id, prompt: image_prompt }),
+            body: JSON.stringify({ article_id: a.id, image_prompt, image_ai: 'dalle3' }),
           }).catch(() => {});
           handleUpdate({ ...a, status: 'generating_image' });
         } catch { /* ignore */ }
