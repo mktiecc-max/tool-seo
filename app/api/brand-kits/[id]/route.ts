@@ -31,6 +31,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       'name', 'description', 'brand_colors', 'logo_url',
       'writing_rules', 'tone_of_voice', 'forbidden_words',
       'target_audience', 'image_style', 'image_rules', 'guide_files',
+      'brand_images',
     ];
     for (const field of allowedFields) {
       if (field in body) updates[field] = body[field];

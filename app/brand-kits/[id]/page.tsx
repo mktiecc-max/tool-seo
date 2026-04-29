@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Palette, Save, ArrowLeft, Loader2, Plus, X,
-  FileText, Image as ImageIcon, Type, Upload, Eye, Trash2, Info,
+  FileText, Image as ImageIcon, Type, Upload, Eye, Trash2, Info, Pipette, Link as LinkIcon,
 } from 'lucide-react';
-import { BrandKit, BrandGuideFile } from '@/types';
+import { BrandKit, BrandGuideFile, BrandImage } from '@/types';
 
 type Tab = 'basic' | 'writing' | 'image' | 'files';
 
@@ -28,6 +28,7 @@ const defaultKit: Partial<BrandKit> = {
   image_style: '',
   image_rules: '',
   guide_files: [],
+  brand_images: [],
 };
 
 export default function BrandKitEditorPage({ params }: Props) {
@@ -39,13 +40,14 @@ export default function BrandKitEditorPage({ params }: Props) {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
 
-  // For color input
   const [colorInput, setColorInput] = useState('');
-  // For forbidden words input
   const [wordInput, setWordInput] = useState('');
-  // For file upload
   const fileRef = useRef<HTMLInputElement>(null);
+  const logoUploadRef = useRef<HTMLInputElement>(null);
+  const brandImgRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [logoMode, setLogoMode] = useState<'url'|'upload'>('url');
 
   useEffect(() => {
     if (!isNew(params.id)) {
@@ -93,6 +95,83 @@ export default function BrandKitEditorPage({ params }: Props) {
 
   const removeWord = (i: number) => {
     set('forbidden_words', (kit.forbidden_words || []).filter((_, idx) => idx !== i));
+  };
+
+  // ---- Logo upload ----
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Chỉ chấp nhận file ảnh'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => { set('logo_url', ev.target?.result as string); };
+    reader.readAsDataURL(file);
+    if (logoUploadRef.current) logoUploadRef.current.value = '';
+  };
+
+  // ---- Extract colors from logo via Canvas ----
+  const extractColorsFromLogo = useCallback(() => {
+    const src = kit.logo_url;
+    if (!src) return;
+    setExtracting(true);
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 80;
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+      const colorMap: Record<string, number> = {};
+      for (let i = 0; i < data.length; i += 16) {
+        const r = Math.round(data[i] / 32) * 32;
+        const g = Math.round(data[i+1] / 32) * 32;
+        const b = Math.round(data[i+2] / 32) * 32;
+        const a = data[i+3];
+        if (a < 128 || (r > 240 && g > 240 && b > 240) || (r < 15 && g < 15 && b < 15)) continue;
+        const key = `${r},${g},${b}`;
+        colorMap[key] = (colorMap[key] || 0) + 1;
+      }
+      const top = Object.entries(colorMap).sort((a,b) => b[1]-a[1]).slice(0, 5);
+      const hexColors = top.map(([k]) => {
+        const [r,g,b] = k.split(',').map(Number);
+        return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+      });
+      const existing = kit.brand_colors || [];
+      const merged = [...new Set([...existing, ...hexColors])];
+      set('brand_colors', merged);
+      setExtracting(false);
+    };
+    img.onerror = () => { setError('Không thể đọc ảnh để trích xuất màu'); setExtracting(false); };
+    img.src = src;
+  }, [kit.logo_url, kit.brand_colors]);
+
+  // ---- Brand images upload ----
+  const handleBrandImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const newImgs: BrandImage[] = [];
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      const dataUrl = await new Promise<string>((res) => {
+        const r = new FileReader();
+        r.onload = (ev) => res(ev.target?.result as string);
+        r.readAsDataURL(file);
+      });
+      newImgs.push({ name: file.name, data_url: dataUrl, uploaded_at: new Date().toISOString() });
+    }
+    set('brand_images', [...(kit.brand_images || []), ...newImgs]);
+    if (brandImgRef.current) brandImgRef.current.value = '';
+  };
+
+  const removeBrandImage = (i: number) => {
+    set('brand_images', (kit.brand_images || []).filter((_, idx) => idx !== i));
+  };
+
+  const updateBrandImageDesc = (i: number, desc: string) => {
+    const imgs = [...(kit.brand_images || [])];
+    imgs[i] = { ...imgs[i], description: desc };
+    set('brand_images', imgs);
   };
 
   // ---- Guide file upload ----
@@ -420,19 +499,60 @@ export default function BrandKitEditorPage({ params }: Props) {
             )}
           </div>
 
-          {/* Logo URL */}
+          {/* Logo */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">URL Logo</label>
-            <input
-              type="url"
-              value={kit.logo_url || ''}
-              onChange={(e) => set('logo_url', e.target.value)}
-              placeholder="https://example.com/logo.png"
-              className="w-full bg-gray-900 border border-gray-700 focus:border-violet-500 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none transition-colors text-sm"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-gray-300">Logo thương hiệu</label>
+              <div className="flex gap-1">
+                <button onClick={() => setLogoMode('url')} className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors ${logoMode==='url' ? 'bg-violet-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}><LinkIcon size={10}/> URL</button>
+                <button onClick={() => setLogoMode('upload')} className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors ${logoMode==='upload' ? 'bg-violet-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}><Upload size={10}/> Tải lên</button>
+              </div>
+            </div>
+            {logoMode === 'url' ? (
+              <input type="url" value={kit.logo_url?.startsWith('data:') ? '' : (kit.logo_url || '')} onChange={(e) => set('logo_url', e.target.value)} placeholder="https://example.com/logo.png" className="w-full bg-gray-900 border border-gray-700 focus:border-violet-500 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none transition-colors text-sm" />
+            ) : (
+              <>
+                <input ref={logoUploadRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" id="logo-upload" />
+                <label htmlFor="logo-upload" className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-700 hover:border-violet-600 rounded-xl cursor-pointer text-sm text-gray-400 hover:text-violet-400 transition-colors">
+                  <Upload size={15}/> Chọn file ảnh logo
+                </label>
+              </>
+            )}
             {kit.logo_url && (
-              <div className="mt-2 p-3 bg-gray-900 border border-gray-800 rounded-xl">
-                <img src={kit.logo_url} alt="Logo preview" className="h-10 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <div className="mt-3 p-4 bg-gray-900 border border-gray-800 rounded-xl flex items-center justify-between gap-4">
+                <img src={kit.logo_url} alt="Logo" className="h-14 max-w-[160px] object-contain" onError={(e)=>{(e.target as HTMLImageElement).style.display='none';}} />
+                <div className="flex gap-2">
+                  <button onClick={extractColorsFromLogo} disabled={extracting} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
+                    {extracting ? <Loader2 size={12} className="animate-spin"/> : <Pipette size={12}/>}
+                    {extracting ? 'Đang trích xuất...' : 'Trích xuất màu'}
+                  </button>
+                  <button onClick={() => set('logo_url', '')} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-900/30 rounded-lg transition-colors"><X size={13}/></button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Brand Images Gallery */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">Ảnh thương hiệu khác</label>
+            <input ref={brandImgRef} type="file" accept="image/*" multiple onChange={handleBrandImageUpload} className="hidden" id="brand-img-upload" />
+            <label htmlFor="brand-img-upload" className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-700 hover:border-violet-600 rounded-xl cursor-pointer text-sm text-gray-400 hover:text-violet-400 transition-colors mb-3">
+              <Upload size={15}/> Upload ảnh brand (logo variant, banner, icon...)
+            </label>
+            {kit.brand_images && kit.brand_images.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                {kit.brand_images.map((img, i) => (
+                  <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                    <div className="relative">
+                      <img src={img.data_url} alt={img.name} className="w-full h-28 object-cover" />
+                      <button onClick={() => removeBrandImage(i)} className="absolute top-2 right-2 p-1 bg-black/60 hover:bg-red-900/80 text-white rounded-lg transition-colors"><Trash2 size={12}/></button>
+                    </div>
+                    <div className="p-2">
+                      <p className="text-xs text-gray-500 truncate mb-1">{img.name}</p>
+                      <input type="text" value={img.description || ''} onChange={(e) => updateBrandImageDesc(i, e.target.value)} placeholder="Mô tả ảnh này..." className="w-full text-xs bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-gray-300 placeholder-gray-600 outline-none" />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

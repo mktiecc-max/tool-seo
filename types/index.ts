@@ -236,29 +236,33 @@ export interface ArticleConfig {
 // ---- Brand Kit ----
 
 export interface BrandGuideFile {
-  name: string;           // "huong-dan-thuong-hieu.md"
-  content_text: string;   // nội dung text đã upload
-  size?: number;          // bytes
-  uploaded_at?: string;   // ISO8601
+  name: string;
+  content_text: string;
+  size?: number;
+  uploaded_at?: string;
+}
+
+export interface BrandImage {
+  name: string;          // tên file
+  data_url: string;      // base64 data URL
+  description?: string;  // mô tả (optional)
+  uploaded_at?: string;
 }
 
 export interface BrandKit {
   id: string;
   name: string;
   description?: string;
-  // Visual identity
-  brand_colors?: string[];         // hex codes: ["#6B21A8", "#F59E0B"]
-  logo_url?: string;
-  // Writing rules
-  writing_rules?: string;          // markdown free-text
+  brand_colors?: string[];
+  logo_url?: string;           // URL hoặc base64 data URL
+  writing_rules?: string;
   tone_of_voice?: string;
   forbidden_words?: string[];
   target_audience?: string;
-  // Image rules
   image_style?: string;
   image_rules?: string;
-  // Guide files
   guide_files?: BrandGuideFile[];
+  brand_images?: BrandImage[];  // ảnh brand khác
   created_at: string;
   updated_at: string;
 }
