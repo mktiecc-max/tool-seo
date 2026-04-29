@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Palette, Save, ArrowLeft, Loader2, Plus, X,
-  FileText, Image as ImageIcon, Type, Upload, Eye, Trash2, Info, Pipette, Link as LinkIcon,
+  FileText, Image as ImageIcon, Type, Upload, Eye, Trash2, Info, Wand2, Globe,
 } from 'lucide-react';
 import { BrandKit, BrandGuideFile, BrandImage } from '@/types';
 
@@ -138,7 +138,7 @@ export default function BrandKitEditorPage({ params }: Props) {
         return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
       });
       const existing = kit.brand_colors || [];
-      const merged = [...new Set([...existing, ...hexColors])];
+      const merged = Array.from(new Set([...existing, ...hexColors]));
       set('brand_colors', merged);
       setExtracting(false);
     };
@@ -504,7 +504,7 @@ export default function BrandKitEditorPage({ params }: Props) {
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-sm font-medium text-gray-300">Logo thương hiệu</label>
               <div className="flex gap-1">
-                <button onClick={() => setLogoMode('url')} className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors ${logoMode==='url' ? 'bg-violet-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}><LinkIcon size={10}/> URL</button>
+                <button onClick={() => setLogoMode('url')} className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors ${logoMode==='url' ? 'bg-violet-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}><Globe size={10}/> URL</button>
                 <button onClick={() => setLogoMode('upload')} className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors ${logoMode==='upload' ? 'bg-violet-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}><Upload size={10}/> Tải lên</button>
               </div>
             </div>
@@ -523,7 +523,7 @@ export default function BrandKitEditorPage({ params }: Props) {
                 <img src={kit.logo_url} alt="Logo" className="h-14 max-w-[160px] object-contain" onError={(e)=>{(e.target as HTMLImageElement).style.display='none';}} />
                 <div className="flex gap-2">
                   <button onClick={extractColorsFromLogo} disabled={extracting} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
-                    {extracting ? <Loader2 size={12} className="animate-spin"/> : <Pipette size={12}/>}
+                    {extracting ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
                     {extracting ? 'Đang trích xuất...' : 'Trích xuất màu'}
                   </button>
                   <button onClick={() => set('logo_url', '')} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-900/30 rounded-lg transition-colors"><X size={13}/></button>
