@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Article, ArticleType, ArticleTone, AIModel } from '@/types';
 import { Loader2, ChevronRight, Zap, BookOpen, List, Star, GitCompare, HelpCircle, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import BrandKitSelector from '@/components/articles/BrandKitSelector';
 
 interface Props {
   article: Article | null;
@@ -48,6 +49,7 @@ export default function Step1Config({ article, initialKeyword, initialKeywordId,
   const [hasFaq, setHasFaq] = useState(article?.has_faq ?? false);
   const [hasCta, setHasCta] = useState(article?.has_cta ?? true);
   const [aiModel, setAiModel] = useState<AIModel>(article?.ai_model || 'claude');
+  const [brandKitId, setBrandKitId] = useState<string | undefined>(article?.brand_kit_id);
   const [loading, setLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState('');
@@ -68,6 +70,7 @@ export default function Step1Config({ article, initialKeyword, initialKeywordId,
     has_faq: hasFaq,
     has_cta: hasCta,
     ai_model: aiModel,
+    brand_kit_id: brandKitId,
   });
 
   const handleSubmit = async () => {
@@ -292,6 +295,9 @@ export default function Step1Config({ article, initialKeyword, initialKeywordId,
           ))}
         </div>
       </div>
+
+      {/* Brand Kit */}
+      <BrandKitSelector value={brandKitId} onChange={setBrandKitId} />
 
       {error && (
         <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300 whitespace-pre-line">

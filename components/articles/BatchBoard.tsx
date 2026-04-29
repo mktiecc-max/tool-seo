@@ -47,33 +47,58 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
 
   // Bulk approve outlines for selected cards that are in outline_review
   const handleBulkRun = async () => {
-    const targets = articles.filter(
+    const outlineTargets = articles.filter(
       (a) => selectedIds.has(a.id) && a.status === 'outline_review'
     );
-    if (targets.length === 0) return;
+    const contentTargets = articles.filter(
+      (a) => selectedIds.has(a.id) && a.status === 'content_review'
+    );
+    if (outlineTargets.length === 0 && contentTargets.length === 0) return;
     setBulkRunning(true);
-    // Fire all in parallel — each card's internal polling will track progress
+
+    // 1. Approve outlines (outline_review → generate content)
     await Promise.all(
-      targets.map(async (a) => {
+      outlineTargets.map(async (a) => {
         try {
-          // 1. Confirm outline
           const res = await fetch('/api/articles/confirm-outline', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ article_id: a.id, outline: a.outline }),
           });
           if (!res.ok) return;
-          // 2. Fire content generation (streaming — fire and forget)
           fetch('/api/articles/generate-content', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ article_id: a.id }),
           }).then((r) => r.body?.cancel()).catch(() => {});
-          // Update local state to generating_content
           handleUpdate({ ...a, status: 'generating_content' });
-        } catch { /* ignore per-article errors */ }
+        } catch { /* ignore */ }
       })
     );
+
+    // 2. Generate images for content_review articles
+    await Promise.all(
+      contentTargets.map(async (a) => {
+        try {
+          // First generate image prompt, then trigger image generation
+          const promptRes = await fetch('/api/articles/generate-image-prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ article_id: a.id }),
+          });
+          if (!promptRes.ok) return;
+          const { image_prompt } = await promptRes.json();
+          // Trigger image generation (fire and forget)
+          fetch('/api/articles/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ article_id: a.id, prompt: image_prompt }),
+          }).catch(() => {});
+          handleUpdate({ ...a, status: 'generating_image' });
+        } catch { /* ignore */ }
+      })
+    );
+
     setSelectedIds(new Set());
     setBulkRunning(false);
   };
@@ -139,10 +164,19 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
     (a) => !['generating_content', 'generating_image', 'publishing'].includes(a.status)
   ).length;
 
-  // Count selected articles that can be bulk-run (outline_review)
+  // Count selected articles that can be bulk-run (outline_review OR content_review)
   const bulkRunnable = articles.filter(
-    (a) => selectedIds.has(a.id) && a.status === 'outline_review'
+    (a) => selectedIds.has(a.id) && (a.status === 'outline_review' || a.status === 'content_review')
   ).length;
+
+  const bulkRunLabel = () => {
+    const outlineCount = articles.filter((a) => selectedIds.has(a.id) && a.status === 'outline_review').length;
+    const contentCount = articles.filter((a) => selectedIds.has(a.id) && a.status === 'content_review').length;
+    if (outlineCount > 0 && contentCount > 0) return `Duyệt & Tiếp tục ${bulkRunnable} bài`;
+    if (outlineCount > 0) return `Duyệt & Viết ${outlineCount} bài`;
+    if (contentCount > 0) return `Tạo ảnh ${contentCount} bài`;
+    return `Duyệt & Viết ${selectedIds.size} bài`;
+  };
 
   // Show the bulk button whenever ANY article is selected
   const showBulkButton = selectedIds.size > 0;
@@ -242,11 +276,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
               className="flex items-center gap-2 px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors"
             >
               {bulkRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              {bulkRunning
-                ? 'Đang chạy...'
-                : bulkRunnable > 0
-                  ? `Duyệt & Viết ${bulkRunnable} bài`
-                  : `Duyệt & Viết ${selectedIds.size} bài`}
+              {bulkRunning ? 'Đang chạy...' : bulkRunnable > 0 ? bulkRunLabel() : `Duyệt & Viết ${selectedIds.size} bài`}
             </button>
             <button
               onClick={() => setSelectedIds(new Set())}
