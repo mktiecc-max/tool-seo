@@ -66,11 +66,12 @@ export async function POST(req: NextRequest) {
       meta_description: article.meta_description,
     });
 
-    // Update article as done
+    // Update article as done — lưu URL thật từ WP vào field slug để frontend dùng
     const { data: updatedArticle } = await db
       .from('articles')
       .update({
         wp_post_id: wpPostId,
+        slug: wpPostUrl,       // ghi đè slug bằng URL đầy đủ từ WordPress
         status: 'done',
         error_message: null,
       })

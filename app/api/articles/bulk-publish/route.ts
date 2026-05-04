@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
           } catch { /* continue without image */ }
         }
 
-        const { id: wpPostId } = await createWPPost(wpConfig, {
+        const { id: wpPostId, link: wpPostUrl } = await createWPPost(wpConfig, {
           title: article.meta_title || article.keyword,
           content: article.content_html || '',
           slug: article.slug || '',
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
 
         await db.from('articles').update({
           wp_post_id: wpPostId,
+          slug: wpPostUrl,       // ghi đè slug bằng URL đầy đủ từ WordPress
           status: 'done',
           error_message: null,
         }).eq('id', article_id);

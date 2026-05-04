@@ -27,10 +27,11 @@ export default function Step6Publish({ article, onPublished }: Props) {
     loadCategories();
   }, []);
 
-  // Already published
+  // Already published — article.slug holds the full WP URL after publishing
   useEffect(() => {
-    if (article.status === 'done' && article.wp_post_id) {
-      setWpLink(`${article.slug || ''}`);
+    if (article.status === 'done' && article.wp_post_id && article.slug) {
+      // slug được overwrite thành URL đầy đủ từ WP sau khi đăng
+      setWpLink(article.slug);
     }
   }, [article]);
 
