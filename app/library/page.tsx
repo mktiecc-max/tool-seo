@@ -52,6 +52,7 @@ export default function LibraryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPublishing, setBulkPublishing] = useState(false);
   const [drawerArticle, setDrawerArticle] = useState<Article | null>(null);
+  const [wpUrl, setWpUrl] = useState(''); // WP site URL để build fallback permalink
 
   // Đọc tab từ URL params khi mount
   useEffect(() => {
@@ -93,6 +94,25 @@ export default function LibraryPage() {
 
     return () => { supabase.removeChannel(channel); };
   }, [loadArticles]);
+
+  // Lấy wp_url từ settings một lần để build fallback permalink
+  useEffect(() => {
+    supabase
+      .from('settings')
+      .select('wp_url')
+      .limit(1)
+      .single()
+      .then(({ data }) => { if (data?.wp_url) setWpUrl(data.wp_url.replace(/\/$/, '')); });
+  }, []);
+
+  /** Trả về link đến bài trên WP:
+   *  - Nếu article.slug đã là full URL (từ fix mới) → dùng nó
+   *  - Nếu không → fallback với /?p=ID (luôn hoạt động, kể cả bản nháp) */
+  const getWpLink = (article: Article): string => {
+    if (article.slug?.startsWith('http')) return article.slug;
+    if (article.wp_post_id && wpUrl) return `${wpUrl}/?p=${article.wp_post_id}`;
+    return '';
+  };
 
   // Filter logic
   const filtered = articles.filter((a) => {
@@ -473,10 +493,11 @@ export default function LibraryPage() {
                         {isGenerating && (
                           <span className="text-xs text-gray-600 italic">Đang tạo...</span>
                         )}
-                        {article.status === 'done' && article.wp_post_id && (
+                        {article.wp_post_id && getWpLink(article) && (
                           <button
-                            onClick={() => window.open(`${article.slug}`, '_blank')}
+                            onClick={() => window.open(getWpLink(article), '_blank')}
                             className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
+                            title="Xem permalink trên WordPress"
                           >
                             <ExternalLink size={11} /> Xem bài
                           </button>
@@ -590,9 +611,9 @@ export default function LibraryPage() {
                   <span className="text-xs text-gray-400">{drawerArticle.word_count.toLocaleString('vi-VN')} từ</span>
                 </div>
               )}
-              {drawerArticle.slug && drawerArticle.wp_post_id && (
+              {drawerArticle.wp_post_id && getWpLink(drawerArticle) && (
                 <a
-                  href={drawerArticle.slug}
+                  href={getWpLink(drawerArticle)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors ml-auto"
