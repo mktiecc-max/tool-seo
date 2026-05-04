@@ -5,6 +5,32 @@ import { Article, WPCategory, WPTag } from '@/types';
 import { Loader2, ExternalLink, CheckCircle2, AlertCircle, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+/** Build flat sorted list from category tree (DFS), trả về mảng với depth */
+function buildCategoryTree(
+  cats: WPCategory[]
+): { cat: WPCategory; depth: number }[] {
+  const childMap = new Map<number, WPCategory[]>();
+  for (const c of cats) {
+    if (!childMap.has(c.parent)) childMap.set(c.parent, []);
+    childMap.get(c.parent)!.push(c);
+  }
+
+  const result: { cat: WPCategory; depth: number }[] = [];
+
+  function dfs(parentId: number, depth: number) {
+    const children = childMap.get(parentId) || [];
+    // Sort alphabetically within same level
+    children.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    for (const child of children) {
+      result.push({ cat: child, depth });
+      dfs(child.id, depth + 1);
+    }
+  }
+
+  dfs(0, 0); // Start from root (parent === 0)
+  return result;
+}
+
 interface Props {
   article: Article;
   onPublished: (article: Article) => void;
@@ -187,8 +213,10 @@ export default function Step6Publish({ article, onPublished }: Props) {
             className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
           >
             <option value="">— Không chọn category —</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            {buildCategoryTree(categories).map(({ cat, depth }) => (
+              <option key={cat.id} value={cat.id}>
+                {depth > 0 ? '  '.repeat(depth) + '— ' + cat.name : cat.name}
+              </option>
             ))}
           </select>
         )}

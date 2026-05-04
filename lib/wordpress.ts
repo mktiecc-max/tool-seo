@@ -35,11 +35,24 @@ export async function testWPConnection(config: WPConfig): Promise<boolean> {
 }
 
 export async function getWPCategories(config: WPConfig): Promise<WPCategory[]> {
-  const res = await fetch(`${config.wp_url}/wp-json/wp/v2/categories?per_page=100`, {
-    headers: { Authorization: getAuthHeader(config) },
-  });
-  if (!res.ok) throw new Error(`WP categories error: ${res.status}`);
-  return res.json();
+  // Fetch up to 100 categories per page (WP max), handle pagination
+  const allCats: WPCategory[] = [];
+  let page = 1;
+
+  while (true) {
+    const res = await fetch(
+      `${config.wp_url}/wp-json/wp/v2/categories?per_page=100&page=${page}&_fields=id,name,slug,parent`,
+      { headers: { Authorization: getAuthHeader(config) } }
+    );
+    if (!res.ok) throw new Error(`WP categories error: ${res.status}`);
+    const cats: WPCategory[] = await res.json();
+    allCats.push(...cats);
+    // If returned less than 100, we've reached the last page
+    if (cats.length < 100) break;
+    page++;
+  }
+
+  return allCats;
 }
 
 export async function searchWPTags(config: WPConfig, query: string): Promise<WPTag[]> {
