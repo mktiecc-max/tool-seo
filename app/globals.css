@@ -69,3 +69,38 @@ body {
 .animate-pulse-slow {
   animation: pulse-slow 2s ease-in-out infinite;
 }
+
+/* Article HTML content preview in drawer */
+.prose-article {
+  color: #d1d5db;
+  font-size: 0.9rem;
+  line-height: 1.8;
+}
+.prose-article h1 { font-size: 1.75rem; font-weight: 700; color: #f9fafb; margin: 1.5rem 0 0.75rem; }
+.prose-article h2 { font-size: 1.35rem; font-weight: 700; color: #60a5fa; margin: 1.5rem 0 0.5rem; border-bottom: 1px solid #1e3a5f; padding-bottom: 0.4rem; }
+.prose-article h3 { font-size: 1.1rem; font-weight: 600; color: #93c5fd; margin: 1rem 0 0.4rem; }
+.prose-article h4 { font-size: 1rem; font-weight: 600; color: #bfdbfe; margin: 0.75rem 0 0.3rem; }
+.prose-article p  { margin: 0.6rem 0; }
+.prose-article ul { list-style: disc; padding-left: 1.5rem; margin: 0.6rem 0; }
+.prose-article ol { list-style: decimal; padding-left: 1.5rem; margin: 0.6rem 0; }
+.prose-article li { margin: 0.3rem 0; }
+.prose-article strong { font-weight: 700; color: #f9fafb; }
+.prose-article em { font-style: italic; color: #9ca3af; }
+.prose-article a { color: #60a5fa; text-decoration: underline; }
+.prose-article blockquote { border-left: 3px solid #374151; padding-left: 1rem; color: #9ca3af; margin: 1rem 0; font-style: italic; }
+.prose-article table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.prose-article th { background: #1f2937; color: #e5e7eb; padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; border: 1px solid #374151; }
+.prose-article td { padding: 0.5rem 0.75rem; border: 1px solid #374151; }
+.prose-article tr:nth-child(even) { background: #111827; }
+.prose-article code { background: #1f2937; color: #86efac; padding: 0.1rem 0.4rem; border-radius: 4px; font-family: monospace; font-size: 0.85em; }
+.prose-article pre { background: #111827; border: 1px solid #374151; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 1rem 0; }
+.prose-article hr { border-color: #374151; margin: 1.5rem 0; }
+
+/* Drawer slide-in animation */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.drawer-slide-in {
+  animation: slide-in-right 0.25s ease-out;
+}

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Article, ArticleStatus, STATUS_BADGE } from '@/types';
-import { Library, Search, Filter, Loader2, Trash2, Send, ExternalLink, RefreshCw, AlertCircle, CheckSquare, Play } from 'lucide-react';
+import { Library, Search, Filter, Loader2, Trash2, Send, ExternalLink, RefreshCw, AlertCircle, CheckSquare, Play, X, FileText, Tag, AlignLeft, Image as ImageIcon } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -51,6 +51,7 @@ export default function LibraryPage() {
   const [aiFilter, setAiFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPublishing, setBulkPublishing] = useState(false);
+  const [drawerArticle, setDrawerArticle] = useState<Article | null>(null);
 
   // Đọc tab từ URL params khi mount
   useEffect(() => {
@@ -397,9 +398,10 @@ export default function LibraryPage() {
                 return (
                   <tr
                     key={article.id}
-                    className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors"
+                    className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer"
+                    onClick={() => setDrawerArticle(article)}
                   >
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3" onClick={(e) => { e.stopPropagation(); }}>
                       <input
                         type="checkbox"
                         checked={selected.has(article.id)}
@@ -458,7 +460,7 @@ export default function LibraryPage() {
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2">
                         {isReviewable && (
                           <Link
@@ -538,6 +540,105 @@ export default function LibraryPage() {
                 {bulkDeleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                 {bulkDeleting ? 'Đang xóa...' : 'Xóa'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Article Detail Drawer */}
+      {drawerArticle && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="flex-1 bg-black/60 backdrop-blur-sm"
+            onClick={() => setDrawerArticle(null)}
+          />
+          {/* Drawer panel */}
+          <div className="w-[700px] max-w-full bg-gray-950 border-l border-gray-800 h-full overflow-y-auto flex flex-col shadow-2xl drawer-slide-in">
+            {/* Header */}
+            <div className="sticky top-0 bg-gray-950 border-b border-gray-800 px-6 py-4 flex items-start gap-3 z-10">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide font-medium">Nội dung bài viết</p>
+                <h2 className="text-lg font-bold text-white leading-tight truncate">
+                  {drawerArticle.meta_title || drawerArticle.keyword}
+                </h2>
+                {drawerArticle.meta_description && (
+                  <p className="text-sm text-gray-400 mt-1 line-clamp-2">{drawerArticle.meta_description}</p>
+                )}
+              </div>
+              <button
+                onClick={() => setDrawerArticle(null)}
+                className="p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-xl transition-colors shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Meta info bar */}
+            <div className="px-6 py-3 flex flex-wrap gap-4 border-b border-gray-800/50 bg-gray-900/40">
+              <div className="flex items-center gap-1.5">
+                <FileText size={12} className="text-gray-500" />
+                <span className="text-xs text-gray-400">{drawerArticle.article_type}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Tag size={12} className="text-gray-500" />
+                <span className="text-xs text-gray-400 uppercase">{drawerArticle.ai_model}</span>
+              </div>
+              {drawerArticle.word_count && (
+                <div className="flex items-center gap-1.5">
+                  <AlignLeft size={12} className="text-gray-500" />
+                  <span className="text-xs text-gray-400">{drawerArticle.word_count.toLocaleString('vi-VN')} từ</span>
+                </div>
+              )}
+              {drawerArticle.slug && drawerArticle.wp_post_id && (
+                <a
+                  href={drawerArticle.slug}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors ml-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink size={12} />
+                  Xem trên WordPress
+                </a>
+              )}
+            </div>
+
+            {/* Featured image */}
+            {drawerArticle.image_url && (
+              <div className="px-6 pt-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <ImageIcon size={12} className="text-gray-500" />
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">Featured Image</span>
+                </div>
+                <img
+                  src={drawerArticle.image_url}
+                  alt="Featured"
+                  className="w-full max-h-56 object-cover rounded-xl border border-gray-800"
+                />
+              </div>
+            )}
+
+            {/* HTML Content */}
+            <div className="px-6 py-5 flex-1">
+              {drawerArticle.content_html ? (
+                <>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="h-px flex-1 bg-gray-800" />
+                    <span className="text-xs text-gray-600 uppercase tracking-wide">Nội dung</span>
+                    <div className="h-px flex-1 bg-gray-800" />
+                  </div>
+                  <div
+                    className="prose-article"
+                    dangerouslySetInnerHTML={{ __html: drawerArticle.content_html }}
+                  />
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-gray-600">
+                  <FileText size={36} className="mb-3" />
+                  <p className="text-sm">Chưa có nội dung</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
