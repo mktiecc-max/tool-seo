@@ -45,9 +45,9 @@ function fileToBase64(file: File): Promise<{ base64: string; mime: string }> {
 
 export default function Step5Image({ article, onConfirmed }: Props) {
   const [imagePrompt, setImagePrompt] = useState(article.image_prompt || '');
-  const [imageAI, setImageAI] = useState<ImageAI>('dalle3');
+  const [imageAI, setImageAI] = useState<ImageAI>('gpt-image-1');
   const [imageSize, setImageSize] = useState('1792x1024');
-  const [imageType, setImageType] = useState('illustration');
+  const [imageType, setImageType] = useState('photo');
   const [imageUrl, setImageUrl] = useState(article.image_url || '');
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
@@ -94,7 +94,9 @@ export default function Step5Image({ article, onConfirmed }: Props) {
     if (!imagePrompt.trim()) { setError('Vui lòng nhập image prompt'); return; }
     setGeneratingImage(true);
     setError('');
-    const finalPrompt = imagePrompt.trim() + (selectedType.hint ? `. Style: ${selectedType.hint}` : '');
+    // Only append style hint for non-photo types — photo/realistic prompts work better without forced style
+    const styleHint = selectedType.value === 'photo' ? '' : (selectedType.hint ? `. Style: ${selectedType.hint}` : '');
+    const finalPrompt = imagePrompt.trim() + styleHint;
     try {
       const res = await fetch('/api/articles/generate-image', {
         method: 'POST',
@@ -121,7 +123,9 @@ export default function Step5Image({ article, onConfirmed }: Props) {
     if (!referenceFile) { setError('Vui lòng chọn ảnh tham chiếu'); return; }
     setGeneratingImage(true);
     setError('');
-    const finalPrompt = imagePrompt.trim() + (selectedType.hint ? `. Style: ${selectedType.hint}` : '');
+    // Only append style hint for non-photo types
+    const styleHint2 = selectedType.value === 'photo' ? '' : (selectedType.hint ? `. Style: ${selectedType.hint}` : '');
+    const finalPrompt2 = imagePrompt.trim() + styleHint2;
     try {
       const { base64, mime } = await fileToBase64(referenceFile);
       const res = await fetch('/api/articles/generate-image-from-reference', {
@@ -129,7 +133,7 @@ export default function Step5Image({ article, onConfirmed }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           article_id: article.id,
-          image_prompt: finalPrompt,
+          image_prompt: finalPrompt2,
           reference_image_base64: base64,
           reference_image_mime: mime,
           image_size: imageSize,
@@ -291,21 +295,25 @@ export default function Step5Image({ article, onConfirmed }: Props) {
       {/* Choose AI */}
       <div>
         <label className="text-sm font-medium text-gray-300 block mb-3">Chọn AI tạo ảnh</label>
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          {[
-            { value: 'dalle3' as ImageAI, label: 'DALL-E 3', sub: 'OpenAI · Chất lượng cao', color: 'from-emerald-500 to-teal-500' },
-            { value: 'gemini-imagen' as ImageAI, label: 'Gemini Imagen', sub: 'Google · High quality', color: 'from-blue-500 to-indigo-500' },
+        <div className="grid grid-cols-3 gap-3 mb-4">
+        {[
+            { value: 'gpt-image-1' as ImageAI, label: 'GPT Image 1', sub: 'OpenAI · Siêu thực · ChatGPT dùng', color: 'from-violet-500 to-purple-600', badge: '✦ Mới nhất' },
+            { value: 'dalle3' as ImageAI, label: 'DALL-E 3', sub: 'OpenAI · Sáng tạo / Minh họa', color: 'from-emerald-500 to-teal-500', badge: null },
+            { value: 'gemini-imagen' as ImageAI, label: 'Gemini Imagen', sub: 'Google · High quality', color: 'from-blue-500 to-indigo-500', badge: null },
           ].map((ai) => (
             <button
               key={ai.value}
               onClick={() => setImageAI(ai.value)}
               className={cn(
-                'p-4 rounded-xl border-2 text-left transition-all',
+                'p-4 rounded-xl border-2 text-left transition-all relative',
                 imageAI === ai.value
                   ? 'border-blue-500 bg-blue-500/10'
                   : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
               )}
             >
+              {ai.badge && (
+                <span className="absolute top-2 right-2 text-[10px] bg-violet-600 text-white px-1.5 py-0.5 rounded-full font-medium">{ai.badge}</span>
+              )}
               <div className={`w-8 h-8 bg-gradient-to-br ${ai.color} rounded-lg mb-2 flex items-center justify-center`}>
                 <ImageIcon size={14} className="text-white" />
               </div>

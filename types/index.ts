@@ -11,7 +11,7 @@ export type KeywordIntent = 'informational' | 'commercial' | 'transactional' | '
 export type ArticleType = 'pillar' | 'howto' | 'listicle' | 'review' | 'comparison';
 export type ArticleTone = 'expert' | 'friendly' | 'persuasive' | 'neutral';
 export type AIModel = 'claude' | 'gpt4o' | 'gemini';
-export type ImageAI = 'dalle3' | 'gemini-imagen';
+export type ImageAI = 'dalle3' | 'gemini-imagen' | 'gpt-image-1';
 
 export type ArticleStatus =
   | 'configuring'

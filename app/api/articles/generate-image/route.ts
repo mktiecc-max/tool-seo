@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, getSettings } from '@/lib/supabase';
-import { generateImageDALLE3 } from '@/lib/ai/openai';
+import { generateImageDALLE3, generateImageGPTImage1 } from '@/lib/ai/openai';
 import { generateImageGemini } from '@/lib/ai/gemini';
 
 export async function POST(req: NextRequest) {
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const { article_id, image_prompt, image_ai, image_size }: {
       article_id: string;
       image_prompt: string;
-      image_ai: 'dalle3' | 'gemini-imagen';
+      image_ai: 'dalle3' | 'gemini-imagen' | 'gpt-image-1';
       image_size?: string;
     } = await req.json();
 
@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
       if (image_ai === 'dalle3') {
         if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
         imageSourceUrl = await generateImageDALLE3(settings.openai_api_key, image_prompt, image_size);
+      } else if (image_ai === 'gpt-image-1') {
+        if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
+        imageSourceUrl = await generateImageGPTImage1(settings.openai_api_key, image_prompt, image_size);
       } else {
         if (!settings.gemini_api_key) throw new Error('Gemini API key chưa được cấu hình');
         imageSourceUrl = await generateImageGemini(settings.gemini_api_key, image_prompt);
@@ -46,11 +49,13 @@ export async function POST(req: NextRequest) {
 
     // Upload to Supabase Storage
     const imageBuffer = await fetchImageBuffer(imageSourceUrl);
-    const filename = `articles/${article_id}/featured-${Date.now()}.jpg`;
+    const ext = imageSourceUrl.startsWith('data:image/png') ? 'png' : 'jpg';
+    const filename = `articles/${article_id}/featured-${Date.now()}.${ext}`;
+    const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
 
     const { data: uploadData, error: uploadError } = await db.storage
       .from('images')
-      .upload(filename, imageBuffer, { contentType: 'image/jpeg', upsert: true });
+      .upload(filename, imageBuffer, { contentType, upsert: true });
 
     let finalUrl = imageSourceUrl;
     if (!uploadError && uploadData) {

@@ -101,6 +101,39 @@ export async function generateImageDALLE3(
 }
 
 /**
+ * Generate a photorealistic image using gpt-image-1 — the same model ChatGPT uses.
+ * Much more realistic than DALL-E 3, especially for people and real scenes.
+ */
+export async function generateImageGPTImage1(
+  apiKey: string,
+  prompt: string,
+  size?: string
+): Promise<string> {
+  const client = new OpenAI({ apiKey });
+  // gpt-image-1 supported sizes
+  const allowedSizes = ['1024x1024', '1536x1024', '1024x1536', 'auto'] as const;
+  type GptSize = typeof allowedSizes[number];
+  // Map our size codes to gpt-image-1 sizes
+  const sizeMap: Record<string, GptSize> = {
+    '1792x1024': '1536x1024',
+    '1024x1792': '1024x1536',
+    '1024x1024': '1024x1024',
+  };
+  const imageSize: GptSize = sizeMap[size || '1792x1024'] || '1536x1024';
+
+  const response = await client.images.generate({
+    model: 'gpt-image-1',
+    prompt,
+    size: imageSize,
+    quality: 'high',
+    n: 1,
+  });
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) throw new Error('gpt-image-1 did not return image data');
+  return `data:image/png;base64,${b64}`;
+}
+
+/**
  * Generate a new image inspired by a reference image using gpt-image-1 (image editing/variation).
  * referenceImageBase64: base64-encoded PNG/JPG (without data: prefix)
  * referenceImageMime: e.g. 'image/png'
