@@ -86,14 +86,63 @@ export async function generateImageDALLE3(
   const imageSize: DalleSize = allowedSizes.includes(size as DalleSize)
     ? (size as DalleSize)
     : '1792x1024';
+  // Use b64_json so image data is embedded (not a temporary URL that expires)
   const response = await client.images.generate({
     model: 'dall-e-3',
     prompt,
     size: imageSize,
     quality: 'standard',
     n: 1,
+    response_format: 'b64_json',
   });
-  const url = response.data?.[0]?.url;
-  if (!url) throw new Error('DALL-E 3 did not return an image URL');
-  return url;
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) throw new Error('DALL-E 3 did not return image data');
+  return `data:image/png;base64,${b64}`;
+}
+
+/**
+ * Generate a new image inspired by a reference image using gpt-image-1 (image editing/variation).
+ * referenceImageBase64: base64-encoded PNG/JPG (without data: prefix)
+ * referenceImageMime: e.g. 'image/png'
+ */
+export async function generateImageFromReference(
+  apiKey: string,
+  prompt: string,
+  referenceImageBase64: string,
+  referenceImageMime: string,
+  size?: string
+): Promise<string> {
+  const client = new OpenAI({ apiKey });
+
+  // Convert base64 to a File-like Blob for the API
+  const byteCharacters = atob(referenceImageBase64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: referenceImageMime });
+  const file = new File([blob], 'reference.png', { type: referenceImageMime });
+
+  const allowedSizes = ['1024x1024', '1536x1024', '1024x1536'] as const;
+  type GptImgSize = typeof allowedSizes[number];
+  // Map dalle3 sizes to gpt-image-1 sizes
+  const sizeMap: Record<string, GptImgSize> = {
+    '1792x1024': '1536x1024',
+    '1024x1792': '1024x1536',
+    '1024x1024': '1024x1024',
+  };
+  const imageSize: GptImgSize = sizeMap[size || '1792x1024'] || '1536x1024';
+
+  const response = await client.images.edit({
+    model: 'gpt-image-1',
+    image: file,
+    prompt,
+    size: imageSize,
+    n: 1,
+  });
+
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) throw new Error('gpt-image-1 did not return image data');
+  return `data:image/png;base64,${b64}`;
 }
