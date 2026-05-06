@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Article, OutlineJSON, OutlineSection } from '@/types';
-import { Loader2, Plus, Trash2, RefreshCw, CheckCircle2, GripVertical } from 'lucide-react';
+import { Loader2, Plus, Trash2, RefreshCw, CheckCircle2, GripVertical, Send, MessageSquare, X } from 'lucide-react';
 
 interface Props {
   article: Article;
@@ -16,6 +16,9 @@ export default function Step2Outline({ article, onConfirmed }: Props) {
   const [regenerating, setRegenerating] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
+  const [chatPrompt, setChatPrompt] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatInputRef = useRef<HTMLInputElement>(null);
 
   const regenerate = async () => {
     setRegenerating(true);
@@ -65,10 +68,63 @@ export default function Step2Outline({ article, onConfirmed }: Props) {
     }
   };
 
+  const handleChatEdit = async () => {
+    if (!chatPrompt.trim() || chatLoading) return;
+    setChatLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/articles/edit-outline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          article_id: article.id,
+          current_outline: outline,
+          user_prompt: chatPrompt.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Lỗi không xác định');
+      setOutline(json.outline);
+      setChatPrompt('');
+    } catch (e: unknown) {
+      setError((e as Error).message);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   const updateH2 = (i: number, val: string) => {
     setOutline((o) => {
       const sections = [...o.sections];
       sections[i] = { ...sections[i], h2: val };
+      return { ...o, sections };
+    });
+  };
+
+  const updateH3 = (sectionIdx: number, h3Idx: number, val: string) => {
+    setOutline((o) => {
+      const sections = [...o.sections];
+      const h3s = [...sections[sectionIdx].h3s];
+      h3s[h3Idx] = val;
+      sections[sectionIdx] = { ...sections[sectionIdx], h3s };
+      return { ...o, sections };
+    });
+  };
+
+  const addH3 = (sectionIdx: number) => {
+    setOutline((o) => {
+      const sections = [...o.sections];
+      const h3s = [...sections[sectionIdx].h3s, 'Tiêu đề phụ mới'];
+      sections[sectionIdx] = { ...sections[sectionIdx], h3s };
+      return { ...o, sections };
+    });
+  };
+
+  const removeH3 = (sectionIdx: number, h3Idx: number) => {
+    setOutline((o) => {
+      const sections = [...o.sections];
+      const h3s = sections[sectionIdx].h3s.filter((_, idx) => idx !== h3Idx);
+      sections[sectionIdx] = { ...sections[sectionIdx], h3s };
       return { ...o, sections };
     });
   };
@@ -97,12 +153,34 @@ export default function Step2Outline({ article, onConfirmed }: Props) {
     });
   };
 
+  const updateFaq = (i: number, val: string) => {
+    setOutline((o) => {
+      const faq = [...(o.faq || [])];
+      faq[i] = val;
+      return { ...o, faq };
+    });
+  };
+
+  const addFaq = () => {
+    setOutline((o) => ({
+      ...o,
+      faq: [...(o.faq || []), 'Câu hỏi mới'],
+    }));
+  };
+
+  const removeFaq = (i: number) => {
+    setOutline((o) => ({
+      ...o,
+      faq: (o.faq || []).filter((_, idx) => idx !== i),
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-white mb-1">Review Outline</h2>
-          <p className="text-gray-400 text-sm">Chỉnh sửa, thêm/xóa, sắp xếp H2 theo ý muốn</p>
+          <p className="text-gray-400 text-sm">Chỉnh sửa, thêm/xóa, sắp xếp H2/H3 theo ý muốn hoặc dùng AI chat</p>
         </div>
         <button
           onClick={regenerate}
@@ -112,6 +190,41 @@ export default function Step2Outline({ article, onConfirmed }: Props) {
           {regenerating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
           Tạo lại outline
         </button>
+      </div>
+
+      {/* AI Chat Input */}
+      <div className="relative">
+        <div className="flex items-center gap-3 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus-within:border-blue-500/50 transition-colors">
+          <MessageSquare size={16} className="text-gray-500 shrink-0" />
+          <input
+            ref={chatInputRef}
+            value={chatPrompt}
+            onChange={(e) => setChatPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && chatPrompt.trim() && !chatLoading) {
+                e.preventDefault();
+                handleChatEdit();
+              }
+            }}
+            placeholder="Yêu cầu AI chỉnh sửa outline... (VD: thêm 2 H2 về lợi ích, đổi H1, xóa phần FAQ...)"
+            className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-600 focus:outline-none"
+            disabled={chatLoading}
+          />
+          <button
+            onClick={handleChatEdit}
+            disabled={!chatPrompt.trim() || chatLoading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 text-white hover:from-blue-500 hover:to-violet-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/15 shrink-0"
+          >
+            {chatLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {chatLoading ? 'Đang xử lý...' : 'Gửi'}
+          </button>
+        </div>
+        {chatLoading && (
+          <div className="absolute -bottom-6 left-4 text-xs text-blue-400 flex items-center gap-1.5">
+            <Loader2 size={10} className="animate-spin" />
+            AI đang chỉnh sửa outline theo yêu cầu...
+          </div>
+        )}
       </div>
 
       {/* H1 */}
@@ -167,17 +280,31 @@ export default function Step2Outline({ article, onConfirmed }: Props) {
                 </button>
               </div>
 
-              {/* H3s */}
-              {section.h3s.length > 0 && (
-                <div className="border-t border-gray-800 px-10 py-2 space-y-1">
-                  {section.h3s.map((h3, j) => (
-                    <div key={j} className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-violet-500 w-6">H3</span>
-                      <p className="text-xs text-gray-400">{h3}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* H3s - Editable */}
+              <div className="border-t border-gray-800 px-10 py-2 space-y-1">
+                {section.h3s.map((h3, j) => (
+                  <div key={j} className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-violet-500 w-6">H3</span>
+                    <input
+                      value={h3}
+                      onChange={(e) => updateH3(i, j, e.target.value)}
+                      className="flex-1 bg-transparent text-xs text-gray-400 focus:outline-none focus:text-gray-200 placeholder-gray-600 border-b border-transparent focus:border-violet-500/30 transition-colors py-0.5"
+                    />
+                    <button
+                      onClick={() => removeH3(i, j)}
+                      className="text-gray-700 hover:text-red-400 transition-colors p-0.5"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => addH3(i)}
+                  className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors mt-1 ml-6"
+                >
+                  <Plus size={11} /> Thêm H3
+                </button>
+              </div>
 
               {section.notes && (
                 <div className="border-t border-gray-800 px-10 py-2">
@@ -196,21 +323,36 @@ export default function Step2Outline({ article, onConfirmed }: Props) {
         </button>
       </div>
 
-      {/* FAQ */}
-      {outline.faq && outline.faq.length > 0 && (
-        <div>
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
-            FAQ ({outline.faq.length} câu hỏi)
-          </label>
-          <div className="space-y-1">
-            {outline.faq.map((q, i) => (
-              <p key={i} className="text-sm text-gray-400 bg-gray-900 rounded-lg px-3 py-2">
-                {i + 1}. {q}
-              </p>
-            ))}
-          </div>
+      {/* FAQ - Editable */}
+      <div>
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+          FAQ ({(outline.faq || []).length} câu hỏi)
+        </label>
+        <div className="space-y-1">
+          {(outline.faq || []).map((q, i) => (
+            <div key={i} className="flex items-center gap-2 bg-gray-900 rounded-lg px-3 py-2">
+              <span className="text-sm text-gray-500 shrink-0">{i + 1}.</span>
+              <input
+                value={q}
+                onChange={(e) => updateFaq(i, e.target.value)}
+                className="flex-1 bg-transparent text-sm text-gray-400 focus:outline-none focus:text-gray-200 border-b border-transparent focus:border-blue-500/30 transition-colors"
+              />
+              <button
+                onClick={() => removeFaq(i)}
+                className="text-gray-700 hover:text-red-400 transition-colors p-0.5"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
         </div>
-      )}
+        <button
+          onClick={addFaq}
+          className="mt-2 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+        >
+          <Plus size={11} /> Thêm câu hỏi FAQ
+        </button>
+      </div>
 
       {/* Meta */}
       {(outline.meta_title || outline.meta_description) && (

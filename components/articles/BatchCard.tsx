@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Article, OutlineJSON } from '@/types';
+import { Article, OutlineJSON, OutlineSection } from '@/types';
 import {
   Loader2, RefreshCw, Trash2, CheckCircle2, ChevronRight,
   FileText, ImageIcon, Globe, AlertCircle, ExternalLink, Eye, EyeOff,
+  Send, Pencil, Plus, MessageSquare, X, GripVertical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +64,13 @@ export default function BatchCard({ article: initialArticle, selected = false, o
   const [imgSize, setImgSize] = useState('1792x1024');
   const [imgType, setImgType] = useState('illustration');
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Outline editing state
+  const [editingOutline, setEditingOutline] = useState(false);
+  const [localOutline, setLocalOutline] = useState<OutlineJSON | null>(null);
+  const [chatPrompt, setChatPrompt] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatInputRef = useRef<HTMLInputElement>(null);
 
   // Sync parent updates
   useEffect(() => {
@@ -205,6 +213,38 @@ export default function BatchCard({ article: initialArticle, selected = false, o
     }
   };
 
+  // AI chat edit outline
+  const handleChatEditOutline = async () => {
+    if (!chatPrompt.trim() || chatLoading) return;
+    setChatLoading(true);
+    setError('');
+    try {
+      const currentOutline = localOutline || article.outline;
+      const res = await fetch('/api/articles/edit-outline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          article_id: article.id,
+          current_outline: currentOutline,
+          user_prompt: chatPrompt.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Lỗi không xác định');
+      const updated = json.article as Article;
+      setArticle(updated);
+      onUpdate(updated);
+      setLocalOutline(updated.outline || null);
+      setChatPrompt('');
+      // Switch to editing mode to show the changes
+      setEditingOutline(false);
+    } catch (e: unknown) {
+      setError((e as Error).message);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   const outline: OutlineJSON | null = article.outline || null;
 
   return (
@@ -252,24 +292,188 @@ export default function BatchCard({ article: initialArticle, selected = false, o
       {/* OUTLINE REVIEW */}
       {article.status === 'outline_review' && outline && (
         <div className="space-y-2">
-          <button
-            onClick={() => setShowOutline((v) => !v)}
-            className="flex items-center gap-2 text-xs text-amber-400 hover:text-amber-300 transition-colors"
-          >
-            {showOutline ? <EyeOff size={12} /> : <Eye size={12} />}
-            {showOutline ? 'Ẩn outline' : 'Xem outline'}
-          </button>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setShowOutline((v) => !v)}
+              className="flex items-center gap-2 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              {showOutline ? <EyeOff size={12} /> : <Eye size={12} />}
+              {showOutline ? 'Ẩn outline' : 'Xem outline'}
+            </button>
+            {showOutline && (
+              <button
+                onClick={() => {
+                  setEditingOutline((v) => !v);
+                  if (!localOutline) setLocalOutline(JSON.parse(JSON.stringify(outline)));
+                }}
+                className={cn(
+                  'flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all',
+                  editingOutline
+                    ? 'text-amber-300 border-amber-500/50 bg-amber-500/10'
+                    : 'text-gray-400 border-gray-700 hover:border-gray-500 hover:text-gray-300'
+                )}
+              >
+                <Pencil size={10} />
+                {editingOutline ? 'Đang sửa' : 'Sửa outline'}
+              </button>
+            )}
+          </div>
           {showOutline && (
             <div className="bg-gray-900/60 rounded-xl p-3 border border-gray-800 text-xs space-y-1.5 max-h-[40vh] overflow-y-auto">
-              <p className="font-bold text-white text-sm leading-tight mb-2">{outline.h1}</p>
-              {outline.sections?.map((s, i) => (
-                <div key={i} className="pb-1.5 border-b border-gray-800/60 last:border-0">
-                  <p className="text-amber-400 font-semibold">H2: {s.h2}</p>
-                  {s.h3s?.map((h3, j) => (
-                    <p key={j} className="text-gray-500 pl-3 leading-relaxed">↳ {h3}</p>
+              {editingOutline && localOutline ? (
+                /* ---- EDITABLE MODE ---- */
+                <div className="space-y-2">
+                  <input
+                    value={localOutline.h1}
+                    onChange={(e) => setLocalOutline({ ...localOutline, h1: e.target.value })}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm font-bold focus:outline-none focus:border-amber-500 transition-colors"
+                    placeholder="H1 - Tiêu đề bài"
+                  />
+                  {localOutline.sections?.map((s, i) => (
+                    <div key={i} className="bg-gray-800/50 rounded-lg p-2 border border-gray-700/50 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-amber-500 font-bold text-[10px] shrink-0">H2</span>
+                        <input
+                          value={s.h2}
+                          onChange={(e) => {
+                            const sections = [...localOutline.sections];
+                            sections[i] = { ...sections[i], h2: e.target.value };
+                            setLocalOutline({ ...localOutline, sections });
+                          }}
+                          className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-amber-400 text-xs font-semibold focus:outline-none focus:border-amber-500"
+                        />
+                        <button
+                          onClick={() => {
+                            const sections = localOutline.sections.filter((_, idx) => idx !== i);
+                            setLocalOutline({ ...localOutline, sections });
+                          }}
+                          className="text-gray-600 hover:text-red-400 transition-colors p-0.5"
+                          title="Xóa section"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                      {s.h3s?.map((h3, j) => (
+                        <div key={j} className="flex items-center gap-1.5 pl-4">
+                          <span className="text-violet-500 font-medium text-[10px] shrink-0">H3</span>
+                          <input
+                            value={h3}
+                            onChange={(e) => {
+                              const sections = [...localOutline.sections];
+                              const h3s = [...sections[i].h3s];
+                              h3s[j] = e.target.value;
+                              sections[i] = { ...sections[i], h3s };
+                              setLocalOutline({ ...localOutline, sections });
+                            }}
+                            className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-0.5 text-gray-400 text-xs focus:outline-none focus:border-violet-500"
+                          />
+                          <button
+                            onClick={() => {
+                              const sections = [...localOutline.sections];
+                              const h3s = sections[i].h3s.filter((_, idx) => idx !== j);
+                              sections[i] = { ...sections[i], h3s };
+                              setLocalOutline({ ...localOutline, sections });
+                            }}
+                            className="text-gray-600 hover:text-red-400 transition-colors p-0.5"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => {
+                          const sections = [...localOutline.sections];
+                          const h3s = [...sections[i].h3s, 'Tiêu đề phụ mới'];
+                          sections[i] = { ...sections[i], h3s };
+                          setLocalOutline({ ...localOutline, sections });
+                        }}
+                        className="ml-4 flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
+                      >
+                        <Plus size={9} /> Thêm H3
+                      </button>
+                    </div>
                   ))}
+                  <button
+                    onClick={() => {
+                      setLocalOutline({
+                        ...localOutline,
+                        sections: [...localOutline.sections, { h2: 'Tiêu đề mới', h3s: [], notes: '' }],
+                      });
+                    }}
+                    className="flex items-center gap-1 w-full justify-center py-1.5 text-[10px] text-amber-400 hover:text-amber-300 border border-dashed border-amber-500/30 hover:border-amber-500/50 rounded-lg transition-colors"
+                  >
+                    <Plus size={10} /> Thêm H2
+                  </button>
+                  {/* Save / Cancel buttons */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        // Apply local edits to article
+                        const updated = { ...article, outline: localOutline };
+                        setArticle(updated);
+                        onUpdate(updated);
+                        setEditingOutline(false);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] font-medium text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-colors"
+                    >
+                      <CheckCircle2 size={10} /> Lưu thay đổi
+                    </button>
+                    <button
+                      onClick={() => {
+                        setLocalOutline(null);
+                        setEditingOutline(false);
+                      }}
+                      className="flex items-center justify-center gap-1 py-1.5 px-3 text-[10px] text-gray-400 hover:text-gray-300 border border-gray-700 rounded-lg transition-colors"
+                    >
+                      Hủy
+                    </button>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                /* ---- READ-ONLY MODE ---- */
+                <>
+                  <p className="font-bold text-white text-sm leading-tight mb-2">{outline.h1}</p>
+                  {outline.sections?.map((s, i) => (
+                    <div key={i} className="pb-1.5 border-b border-gray-800/60 last:border-0">
+                      <p className="text-amber-400 font-semibold">H2: {s.h2}</p>
+                      {s.h3s?.map((h3, j) => (
+                        <p key={j} className="text-gray-500 pl-3 leading-relaxed">↳ {h3}</p>
+                      ))}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* AI Chat input for outline editing */}
+          {showOutline && (
+            <div className="relative">
+              <div className="flex items-center gap-2 bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-2 focus-within:border-amber-500/50 transition-colors">
+                <MessageSquare size={12} className="text-gray-500 shrink-0" />
+                <input
+                  ref={chatInputRef}
+                  value={chatPrompt}
+                  onChange={(e) => setChatPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && chatPrompt.trim() && !chatLoading) {
+                      e.preventDefault();
+                      handleChatEditOutline();
+                    }
+                  }}
+                  placeholder="Yêu cầu AI sửa outline... (VD: thêm 2 H2 về lợi ích, xóa phần FAQ...)"
+                  className="flex-1 bg-transparent text-xs text-gray-200 placeholder-gray-600 focus:outline-none"
+                  disabled={chatLoading}
+                />
+                <button
+                  onClick={handleChatEditOutline}
+                  disabled={!chatPrompt.trim() || chatLoading}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-lg bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
+                >
+                  {chatLoading ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
+                  Gửi
+                </button>
+              </div>
             </div>
           )}
         </div>
