@@ -5,7 +5,7 @@ import { Article, OutlineJSON, OutlineSection } from '@/types';
 import {
   Loader2, RefreshCw, Trash2, CheckCircle2, ChevronRight,
   FileText, ImageIcon, Globe, AlertCircle, ExternalLink, Eye, EyeOff,
-  Send, Pencil, Plus, MessageSquare, X, GripVertical,
+  Send, Pencil, Plus, MessageSquare, X, GripVertical, Sheet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -65,6 +65,10 @@ export default function BatchCard({ article: initialArticle, selected = false, o
   const [imgType, setImgType] = useState('illustration');
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Google Sheets sync state
+  const [syncingSheet, setSyncingSheet] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; sheetUrl?: string; message?: string } | null>(null);
+
   // Outline editing state
   const [editingOutline, setEditingOutline] = useState(false);
   const [localOutline, setLocalOutline] = useState<OutlineJSON | null>(null);
@@ -100,6 +104,27 @@ export default function BatchCard({ article: initialArticle, selected = false, o
   }, [article.status, article.id, isPolling, onUpdate]);
 
   const update = (updated: Article) => { setArticle(updated); onUpdate(updated); };
+
+  // Sync article to Google Sheets
+  const syncToSheet = async () => {
+    setSyncingSheet(true);
+    setSyncResult(null);
+    setError('');
+    try {
+      const res = await fetch('/api/articles/sync-sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_ids: [article.id] }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Đồng bộ thất bại');
+      setSyncResult({ ok: true, sheetUrl: json.sheetUrl, message: `Đã đồng bộ (${json.updated > 0 ? 'cập nhật' : 'thêm mới'})` });
+    } catch (e: unknown) {
+      setSyncResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setSyncingSheet(false);
+    }
+  };
 
   const call = async (
     url: string,
@@ -530,7 +555,7 @@ export default function BatchCard({ article: initialArticle, selected = false, o
 
       {/* DONE */}
       {article.status === 'done' && (
-        <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-xl px-4 py-3 space-y-1">
+        <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-xl px-4 py-3 space-y-1.5">
           <p className="text-xs text-emerald-400 font-medium">🎉 Đã đăng thành công!</p>
           {article.wp_post_id && (
             <p className="text-xs text-gray-400">WordPress Post ID: #{article.wp_post_id}</p>
@@ -540,6 +565,23 @@ export default function BatchCard({ article: initialArticle, selected = false, o
               <Globe size={10} />
               <span className="truncate">/news/{article.slug}</span>
               <ExternalLink size={10} />
+            </div>
+          )}
+          {/* Sheet sync result */}
+          {syncResult && (
+            <div className={cn(
+              'flex items-center gap-1.5 text-xs mt-1 rounded-lg px-2 py-1',
+              syncResult.ok ? 'text-emerald-300 bg-emerald-500/10' : 'text-red-300 bg-red-500/10'
+            )}>
+              {syncResult.ok ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
+              <span>{syncResult.message}</span>
+              {syncResult.ok && syncResult.sheetUrl && (
+                <a href={syncResult.sheetUrl} target="_blank" rel="noreferrer"
+                  className="ml-auto text-emerald-400 hover:text-emerald-300 underline shrink-0"
+                >
+                  Mở Sheet ↗
+                </a>
+              )}
             </div>
           )}
         </div>
@@ -702,13 +744,24 @@ export default function BatchCard({ article: initialArticle, selected = false, o
         )}
 
         {(article.status === 'done') && (
-          <a
-            href={`/articles/${article.id}`}
-            target="_blank"
-            className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-emerald-900/50 hover:bg-emerald-800/50 text-emerald-300 text-xs rounded-xl border border-emerald-700 transition-colors"
-          >
-            <ExternalLink size={11} /> Xem bài hoàn chỉnh
-          </a>
+          <div className="flex gap-2">
+            <a
+              href={`/articles/${article.id}`}
+              target="_blank"
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 bg-emerald-900/50 hover:bg-emerald-800/50 text-emerald-300 text-xs rounded-xl border border-emerald-700 transition-colors"
+            >
+              <ExternalLink size={11} /> Xem bài
+            </a>
+            <button
+              onClick={syncToSheet}
+              disabled={syncingSheet}
+              title="Đồng bộ lên Google Sheet"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-green-900/40 hover:bg-green-800/50 disabled:opacity-50 text-green-300 text-xs rounded-xl border border-green-700/60 hover:border-green-600 transition-colors"
+            >
+              {syncingSheet ? <Loader2 size={11} className="animate-spin" /> : <Sheet size={11} />}
+              {syncingSheet ? 'Đang sync...' : 'Sync Sheet'}
+            </button>
+          </div>
         )}
       </div>
 
