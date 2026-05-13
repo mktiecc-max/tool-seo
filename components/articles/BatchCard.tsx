@@ -63,7 +63,17 @@ export default function BatchCard({ article: initialArticle, selected = false, o
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [imgSize, setImgSize] = useState('1792x1024');
   const [imgType, setImgType] = useState('illustration');
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [imgAI, setImgAI] = useState<'dalle3' | 'gpt-image-1' | 'gemini-imagen'>('gpt-image-1');
+
+  // Dynamic image model list fetched from API
+  const [imageModels, setImageModels] = useState<{
+    id: string; name: string; provider: string; description?: string; isNew?: boolean;
+  }[]>([
+    { id: 'gpt-image-1', name: 'GPT Image 1', provider: 'openai', description: 'ChatGPT Image, thực tế nhất', isNew: true },
+    { id: 'dalle3',      name: 'DALL-E 3',    provider: 'openai', description: 'Ổn định, nhiều style' },
+    { id: 'gemini-imagen', name: 'Gemini Imagen 3', provider: 'gemini', description: 'Google, chất lượng cao' },
+  ]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   // Google Sheets sync state
   const [syncingSheet, setSyncingSheet] = useState(false);
@@ -75,6 +85,7 @@ export default function BatchCard({ article: initialArticle, selected = false, o
   const [chatPrompt, setChatPrompt] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const chatInputRef = useRef<HTMLInputElement>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Sync parent updates
   useEffect(() => {
@@ -102,6 +113,34 @@ export default function BatchCard({ article: initialArticle, selected = false, o
     }
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, [article.status, article.id, isPolling, onUpdate]);
+
+  // Fetch image models dynamically when reaching content_review
+  useEffect(() => {
+    if (article.status !== 'content_review') return;
+    setLoadingModels(true);
+    fetch('/api/models?category=image')
+      .then((r) => r.json())
+      .then((json) => {
+        const models: { id: string; name: string; provider: string; description?: string; isNew?: boolean }[] = [];
+        // Remap API model IDs to our internal image_ai identifiers
+        const idMap: Record<string, string> = {
+          'dall-e-3': 'dalle3',
+          'gpt-image-1': 'gpt-image-1',
+          'imagen-3.0-generate-002': 'gemini-imagen',
+          'imagen-4.0-generate-preview-05-20': 'gemini-imagen',
+        };
+        for (const m of [...(json.openai || []), ...(json.gemini || [])]) {
+          const mapped = idMap[m.id];
+          if (mapped && !models.find((x) => x.id === mapped)) {
+            models.push({ ...m, id: mapped });
+          }
+        }
+        if (models.length > 0) setImageModels(models);
+      })
+      .catch(() => { /* keep defaults */ })
+      .finally(() => setLoadingModels(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [article.status]);
 
   const update = (updated: Article) => { setArticle(updated); onUpdate(updated); };
 
@@ -223,7 +262,7 @@ export default function BatchCard({ article: initialArticle, selected = false, o
     fetch('/api/articles/generate-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ article_id: a.id, image_prompt: finalPrompt, image_ai: 'dalle3', image_size: imgSize }),
+      body: JSON.stringify({ article_id: a.id, image_prompt: finalPrompt, image_ai: imgAI, image_size: imgSize }),
     }).catch((e) => setError((e as Error).message));
   };
 
@@ -637,6 +676,43 @@ export default function BatchCard({ article: initialArticle, selected = false, o
 
         {article.status === 'content_review' && (
           <>
+            {/* ── AI Model selector ── */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-400 font-medium">AI tạo ảnh</p>
+                {loadingModels && <Loader2 size={10} className="animate-spin text-gray-500" />}
+              </div>
+              <div className="grid grid-cols-1 gap-1.5">
+                {imageModels.map((m) => {
+                  const providerColor = m.provider === 'openai'
+                    ? 'border-emerald-700 bg-emerald-500/10 text-emerald-300'
+                    : 'border-blue-700 bg-blue-500/10 text-blue-300';
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => setImgAI(m.id as typeof imgAI)}
+                      className={cn(
+                        'flex items-center gap-2 py-1.5 px-3 rounded-lg border text-left transition-all text-xs',
+                        imgAI === m.id
+                          ? providerColor
+                          : 'border-gray-700 text-gray-400 hover:border-gray-600'
+                      )}
+                    >
+                      <span className="font-semibold text-[11px] flex-1">{m.name}</span>
+                      {m.isNew && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                          MỚI
+                        </span>
+                      )}
+                      {m.description && (
+                        <span className="text-[10px] text-gray-500 shrink-0">{m.description}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Image type selector */}
             <div className="space-y-2">
               <p className="text-xs text-gray-400 font-medium">Loại ảnh</p>
