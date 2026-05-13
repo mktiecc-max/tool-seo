@@ -4,6 +4,18 @@ import { buildContentPrompt } from '@/lib/prompts';
 import { callAIStream } from '@/lib/ai-router';
 import { buildBrandContext } from '@/lib/brand-context';
 
+/**
+ * Strip markdown code block wrappers that some AI models add around HTML output.
+ * Handles: ```html\n...\n```  or  ```\n...\n```
+ */
+function stripMarkdownCodeBlock(raw: string): string {
+  // Match ```html ... ``` or ``` ... ``` (multiline)
+  const match = raw.match(/^```(?:html)?\s*\n?([\s\S]*?)\n?```\s*$/i);
+  if (match) return match[1].trim();
+  // Also strip if it starts with ```html but no closing fence (truncated stream edge case)
+  return raw.replace(/^```(?:html)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { article_id }: { article_id: string } = await req.json();
@@ -46,8 +58,8 @@ export async function POST(req: NextRequest) {
       async flush() {
         // Save to DB when stream ends
         try {
-          // Post-process: ensure clean HTML
-          const cleanedHTML = fullContent.trim();
+          // Post-process: strip markdown code fences (```html ... ```) that AI sometimes adds
+          const cleanedHTML = stripMarkdownCodeBlock(fullContent.trim());
           await db.from('articles').update({
             content_html: cleanedHTML,
             status: 'content_review',

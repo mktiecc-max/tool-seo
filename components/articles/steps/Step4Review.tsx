@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
+import Link from '@tiptap/extension-link';
 import { Article } from '@/types';
 import {
   Loader2, CheckCircle2, RotateCcw, Bold, Italic, List, Heading,
-  Link2, Plus, Trash2, Zap, AlertCircle,
+  Link2, Plus, Trash2, Zap, AlertCircle, MousePointer2, Search,
 } from 'lucide-react';
 import { countKeywordDensity } from '@/lib/utils';
 
@@ -15,6 +16,8 @@ interface LinkPair {
   anchorText: string;
   url: string;
 }
+
+type LinkMode = 'selection' | 'auto';
 
 interface Props {
   article: Article;
@@ -30,12 +33,9 @@ function injectLinks(html: string, links: LinkPair[]): { html: string; count: nu
   for (const { anchorText, url } of links) {
     if (!anchorText.trim() || !url.trim()) continue;
 
-    // Tách HTML thành các phần: link đã có (<a>...</a>) và text thường
     const parts = result.split(/(<a[\s\S]*?<\/a>)/gi);
-
     let replaced = false;
     const newParts = parts.map((part) => {
-      // Bỏ qua nếu đã replace rồi, hoặc đây là đoạn <a> sẵn có
       if (replaced || /^<a/i.test(part)) return part;
       const escaped = anchorText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(escaped, 'i');
@@ -43,12 +43,8 @@ function injectLinks(html: string, links: LinkPair[]): { html: string; count: nu
       if (!match) return part;
       replaced = true;
       count++;
-      return part.replace(
-        regex,
-        `<a href="${url}" target="_blank" rel="nofollow noopener">${match[0]}</a>`
-      );
+      return part.replace(regex, `<a href="${url}" target="_blank" rel="nofollow noopener">${match[0]}</a>`);
     });
-
     result = newParts.join('');
   }
 
@@ -64,20 +60,39 @@ export default function Step4Review({ article, onConfirmed, onBack }: Props) {
   const [density, setDensity] = useState(0);
 
   // Internal links state
+  const [linkMode, setLinkMode] = useState<LinkMode>('selection');
   const [linkPairs, setLinkPairs] = useState<LinkPair[]>([{ anchorText: '', url: '' }]);
   const [linkResult, setLinkResult] = useState<{ count: number; error?: string } | null>(null);
 
+  // Selection-mode state
+  const [selectionUrl, setSelectionUrl] = useState('');
+  const [hasSelection, setHasSelection] = useState(false);
+  const selectionUrlRef = useRef<HTMLInputElement>(null);
+
   const editor = useEditor({
-    extensions: [StarterKit, Image],
+    extensions: [
+      StarterKit,
+      Image,
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          rel: 'nofollow noopener',
+          target: '_blank',
+          class: 'text-blue-400 underline',
+        },
+      }),
+    ],
     content: article.content_html || '',
     editorProps: {
-      attributes: {
-        class: 'tiptap prose prose-invert max-w-none',
-      },
+      attributes: { class: 'tiptap prose prose-invert max-w-none' },
     },
     onUpdate({ editor }) {
       const html = editor.getHTML();
       setDensity(countKeywordDensity(html, article.keyword));
+    },
+    onSelectionUpdate({ editor }) {
+      const { from, to } = editor.state.selection;
+      setHasSelection(from !== to);
     },
     immediatelyRender: false,
   });
@@ -114,7 +129,7 @@ export default function Step4Review({ article, onConfirmed, onBack }: Props) {
     }
   };
 
-  // Apply internal links vào editor
+  // Apply internal links vào editor (auto-find mode)
   const handleApplyLinks = () => {
     if (!editor) return;
     const currentHtml = editor.getHTML();
@@ -126,6 +141,25 @@ export default function Step4Review({ article, onConfirmed, onBack }: Props) {
     editor.commands.setContent(newHtml);
     setLinkResult({ count });
     setTimeout(() => setLinkResult(null), 4000);
+  };
+
+  // Insert link at current selection (selection mode)
+  const handleInsertAtSelection = () => {
+    if (!editor || !selectionUrl.trim()) return;
+    const { from, to } = editor.state.selection;
+    if (from === to) {
+      setLinkResult({ count: 0, error: 'Chưa bôi đen văn bản nào. Hãy chọn text trong editor trước.' });
+      return;
+    }
+    editor.chain().focus().setLink({ href: selectionUrl.trim() }).run();
+    setSelectionUrl('');
+    setLinkResult({ count: 1 });
+    setTimeout(() => setLinkResult(null), 3000);
+  };
+
+  // Remove link at selection
+  const handleRemoveLink = () => {
+    editor?.chain().focus().unsetLink().run();
   };
 
   const addLinkPair = () => setLinkPairs((prev) => [...prev, { anchorText: '', url: '' }]);
@@ -212,50 +246,121 @@ export default function Step4Review({ article, onConfirmed, onBack }: Props) {
                 <Link2 size={14} className="text-blue-400" />
                 <p className="text-xs font-semibold text-gray-300">Internal Links</p>
               </div>
+            </div>
+
+            {/* Mode toggle */}
+            <div className="flex rounded-lg overflow-hidden border border-gray-700 mb-3">
               <button
-                onClick={addLinkPair}
-                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                onClick={() => setLinkMode('selection')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs transition-colors ${
+                  linkMode === 'selection'
+                    ? 'bg-blue-600/30 text-blue-300 font-medium'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
               >
-                <Plus size={12} /> Thêm
+                <MousePointer2 size={11} /> Bôi đen chọn
+              </button>
+              <button
+                onClick={() => setLinkMode('auto')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs transition-colors ${
+                  linkMode === 'auto'
+                    ? 'bg-blue-600/30 text-blue-300 font-medium'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <Search size={11} /> Tìm tự động
               </button>
             </div>
 
-            <div className="space-y-3">
-              {linkPairs.map((pair, i) => (
-                <div key={i} className="space-y-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      value={pair.anchorText}
-                      onChange={(e) => updateLinkPair(i, 'anchorText', e.target.value)}
-                      placeholder="Anchor text..."
-                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
-                    />
-                    {linkPairs.length > 1 && (
-                      <button
-                        onClick={() => removeLinkPair(i)}
-                        className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    value={pair.url}
-                    onChange={(e) => updateLinkPair(i, 'url', e.target.value)}
-                    placeholder="https://ucmasvietnam.com/..."
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 font-mono"
-                    type="url"
-                  />
+            {/* SELECTION MODE */}
+            {linkMode === 'selection' && (
+              <div className="space-y-2">
+                <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border ${
+                  hasSelection
+                    ? 'bg-blue-900/20 border-blue-700/50 text-blue-300'
+                    : 'bg-gray-800/50 border-gray-700 text-gray-500'
+                }`}>
+                  <MousePointer2 size={10} />
+                  {hasSelection ? 'Đã chọn văn bản — nhập URL và bấm Apply' : 'Bôi đen văn bản trong editor...'}
                 </div>
-              ))}
-            </div>
+                <input
+                  ref={selectionUrlRef}
+                  value={selectionUrl}
+                  onChange={(e) => setSelectionUrl(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleInsertAtSelection(); }}
+                  placeholder="https://example.com/..."
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 font-mono"
+                  type="url"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={handleInsertAtSelection}
+                    disabled={!hasSelection || !selectionUrl.trim()}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 disabled:opacity-40 disabled:cursor-not-allowed border border-blue-500/30 text-blue-300 text-xs rounded-lg transition-colors font-medium"
+                  >
+                    <Zap size={11} /> Apply vào vị trí chọn
+                  </button>
+                  {editor?.isActive('link') && (
+                    <button
+                      onClick={handleRemoveLink}
+                      title="Xóa link tại vị trí con trỏ"
+                      className="px-2.5 py-1.5 bg-red-900/20 hover:bg-red-900/40 border border-red-700/30 text-red-400 text-xs rounded-lg transition-colors"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-600">
+                  1. Bôi đen đoạn text trong editor → 2. Nhập URL → 3. Apply
+                </p>
+              </div>
+            )}
 
-            <button
-              onClick={handleApplyLinks}
-              className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs rounded-lg transition-colors font-medium"
-            >
-              <Zap size={12} /> Apply vào nội dung
-            </button>
+            {/* AUTO-FIND MODE */}
+            {linkMode === 'auto' && (
+              <div className="space-y-3">
+                <button
+                  onClick={addLinkPair}
+                  className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  <Plus size={12} /> Thêm cặp link
+                </button>
+                {linkPairs.map((pair, i) => (
+                  <div key={i} className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        value={pair.anchorText}
+                        onChange={(e) => updateLinkPair(i, 'anchorText', e.target.value)}
+                        placeholder="Anchor text..."
+                        className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                      />
+                      {linkPairs.length > 1 && (
+                        <button
+                          onClick={() => removeLinkPair(i)}
+                          className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      value={pair.url}
+                      onChange={(e) => updateLinkPair(i, 'url', e.target.value)}
+                      placeholder="https://example.com/..."
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 font-mono"
+                      type="url"
+                    />
+                  </div>
+                ))}
+                <button
+                  onClick={handleApplyLinks}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs rounded-lg transition-colors font-medium"
+                >
+                  <Zap size={12} /> Apply vào nội dung
+                </button>
+                <p className="text-[10px] text-gray-600">Tìm anchor text và tự động chèn link lần đầu xuất hiện.</p>
+              </div>
+            )}
 
             {/* Result feedback */}
             {linkResult && (
