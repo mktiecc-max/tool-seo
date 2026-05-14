@@ -38,7 +38,7 @@ export async function getSettings(): Promise<Settings | null> {
       wp_app_password: process.env.WP_APP_PASSWORD,
       default_ai_model: 'claude',
       default_image_ai: 'dalle3',
-      max_concurrent_jobs: 3,
+      max_concurrent_jobs: 10,
     };
   }
 
@@ -52,6 +52,6 @@ export async function getSettings(): Promise<Settings | null> {
     wp_url: data.wp_url || process.env.WP_URL,
     wp_username: data.wp_username || process.env.WP_USERNAME,
     wp_app_password: data.wp_app_password || process.env.WP_APP_PASSWORD,
-    max_concurrent_jobs: data.max_concurrent_jobs ?? 3,
+    max_concurrent_jobs: data.max_concurrent_jobs ?? 10,
   };
 }

@@ -423,18 +423,18 @@ export default function SettingsPage() {
               <input
                 type="number"
                 min={1}
-                max={5}
-                value={settings.max_concurrent_jobs ?? 3}
-                onChange={(e) => setSettings((p) => ({ ...p, max_concurrent_jobs: parseInt(e.target.value) || 3 }))}
+                max={50}
+                value={settings.max_concurrent_jobs ?? 5}
+                onChange={(e) => setSettings((p) => ({ ...p, max_concurrent_jobs: parseInt(e.target.value) || 5 }))}
                 className="w-24 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500 text-center font-bold"
               />
-              <div className="flex gap-1.5">
-                {[1, 2, 3, 5].map((n) => (
+              <div className="flex gap-1.5 flex-wrap">
+                {[3, 5, 10, 15, 20].map((n) => (
                   <button
                     key={n}
                     onClick={() => setSettings((p) => ({ ...p, max_concurrent_jobs: n }))}
-                    className={`w-9 h-9 rounded-lg text-sm font-bold border-2 transition-colors ${
-                      (settings.max_concurrent_jobs ?? 3) === n
+                    className={`w-10 h-9 rounded-lg text-sm font-bold border-2 transition-colors ${
+                      (settings.max_concurrent_jobs ?? 5) === n
                         ? 'border-blue-500 bg-blue-500/10 text-blue-300'
                         : 'border-gray-700 text-gray-500 hover:border-gray-600'
                     }`}
@@ -443,7 +443,7 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-500">Khuyến nghị: 3 (tránh quá tải API)</p>
+              <p className="text-xs text-gray-500">Tăng cao → nhanh hơn nhưng tốn API hơn</p>
             </div>
           </div>
         </div>

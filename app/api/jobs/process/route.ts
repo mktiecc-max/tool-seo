@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, getSettings } from '@/lib/supabase';
 import { callAI } from '@/lib/ai-router';
 import { buildOutlinePrompt, buildContentPrompt, buildImagePromptPrompt } from '@/lib/prompts';
-import { generateImageDALLE3 } from '@/lib/ai/openai';
+import { generateImageOpenAI } from '@/lib/ai/openai';
 import { generateImageGemini } from '@/lib/ai/gemini';
 import { generateSlug, truncate } from '@/lib/utils';
 import { OutlineJSON } from '@/types';
@@ -107,12 +107,14 @@ async function processJob(jobId: string, articleId: string, settings: Awaited<Re
     await db.from('articles').update({ image_prompt: imagePrompt }).eq('id', articleId);
 
     // --- Step 4: Generate Image ---
-    const imageAI = article.image_ai || 'dalle3';
+    const imageAI = article.image_ai || 'gpt-image-2';
     let imageUrl = '';
 
     try {
-      if (imageAI === 'dalle3' && settings.openai_api_key) {
-        imageUrl = await generateImageDALLE3(settings.openai_api_key, imagePrompt);
+      if (imageAI === 'gemini-imagen' && settings.gemini_api_key) {
+        imageUrl = await generateImageGemini(settings.gemini_api_key, imagePrompt);
+      } else if (settings.openai_api_key) {
+        imageUrl = await generateImageOpenAI(settings.openai_api_key, imageAI, imagePrompt);
       } else if (settings.gemini_api_key) {
         imageUrl = await generateImageGemini(settings.gemini_api_key, imagePrompt);
       }
