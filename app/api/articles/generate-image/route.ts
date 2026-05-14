@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, getSettings } from '@/lib/supabase';
 import { generateImageOpenAI } from '@/lib/ai/openai';
 import { generateImageGemini } from '@/lib/ai/gemini';
+import { imagePromptJSONToEnglish, ImagePromptJSON } from '@/lib/prompts';
 
 export const runtime = 'nodejs';
 
@@ -37,15 +38,24 @@ export async function POST(req: NextRequest) {
 
     await db.from('articles').update({ status: 'generating_image', image_prompt }).eq('id', article_id);
 
+    // ── Convert JSON prompt → English nếu cần ─────────────────────────────
+    let finalPrompt = image_prompt;
+    try {
+      const parsed: ImagePromptJSON = JSON.parse(image_prompt);
+      if (parsed.mo_ta_canh) finalPrompt = imagePromptJSONToEnglish(parsed);
+    } catch {
+      // Không phải JSON → dùng trực tiếp
+    }
+
     // ── Gọi AI API (có thể mất 15–60s) ──────────────────────────────────────
     let imageSourceUrl: string;
     try {
       if (image_ai === 'gemini-imagen') {
         if (!settings.gemini_api_key) throw new Error('Gemini API key chưa được cấu hình');
-        imageSourceUrl = await generateImageGemini(settings.gemini_api_key, image_prompt);
+        imageSourceUrl = await generateImageGemini(settings.gemini_api_key, finalPrompt);
       } else {
         if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
-        imageSourceUrl = await generateImageOpenAI(settings.openai_api_key, image_ai, image_prompt, image_size);
+        imageSourceUrl = await generateImageOpenAI(settings.openai_api_key, image_ai, finalPrompt, image_size);
       }
     } catch (e: unknown) {
       const msg = (e as Error).message;

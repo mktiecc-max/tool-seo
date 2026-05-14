@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, getSettings } from '@/lib/supabase';
-import { buildImagePromptPrompt } from '@/lib/prompts';
+import { buildImagePromptPrompt, imagePromptJSONToEnglish, ImagePromptJSON } from '@/lib/prompts';
 import { callAI } from '@/lib/ai-router';
 import { truncate } from '@/lib/utils';
 import { buildBrandImageContext } from '@/lib/brand-context';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,11 +31,35 @@ export async function POST(req: NextRequest) {
     }
 
     const prompt = buildImagePromptPrompt(article.keyword, contentSummary) + brandImageContext;
-    const imagePromptText = await callAI(article.ai_model, prompt, settings);
+    const rawText = await callAI(article.ai_model, prompt, settings);
 
-    await db.from('articles').update({ image_prompt: imagePromptText.trim() }).eq('id', article_id);
+    // Parse JSON từ AI response
+    let imagePromptJSON: ImagePromptJSON;
+    try {
+      const cleaned = rawText
+        .replace(/^```(?:json)?\n?/m, '')
+        .replace(/\n?```$/m, '')
+        .trim();
+      imagePromptJSON = JSON.parse(cleaned);
+    } catch {
+      // Nếu AI không trả về JSON hợp lệ, tạo cấu trúc mặc định từ raw text
+      imagePromptJSON = {
+        mo_ta_canh: rawText.trim(),
+        phong_cach: 'Ảnh thực tế chuyên nghiệp (photorealistic), ánh sáng tự nhiên',
+        mau_sac: 'Tông màu tự nhiên, tươi sáng',
+        bo_sung: 'Không có chữ trong ảnh, chất lượng cao',
+      };
+    }
 
-    return NextResponse.json({ image_prompt: imagePromptText.trim() });
+    // Lưu dạng JSON string để UI có thể parse và hiển thị form
+    const imagePromptStr = JSON.stringify(imagePromptJSON, null, 2);
+
+    await db.from('articles').update({ image_prompt: imagePromptStr }).eq('id', article_id);
+
+    return NextResponse.json({
+      image_prompt: imagePromptStr,
+      image_prompt_json: imagePromptJSON,
+    });
   } catch (err: unknown) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

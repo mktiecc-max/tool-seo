@@ -8,6 +8,14 @@ import {
   Image as ImageIcon, Wand2, X, ArrowRight, SkipForward,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { ImagePromptJSON } from '@/lib/prompts';
+
+const EMPTY_PROMPT_JSON: ImagePromptJSON = {
+  mo_ta_canh: '',
+  phong_cach: 'Ảnh thực tế chuyên nghiệp (photorealistic), ánh sáng tự nhiên',
+  mau_sac: 'Tông màu tự nhiên, tươi sáng',
+  bo_sung: 'Không có chữ trong ảnh, chất lượng cao, góc chụp ngang',
+};
 
 interface ImageModelInfo {
   id: string;
@@ -62,6 +70,17 @@ function fileToBase64(file: File): Promise<{ base64: string; mime: string }> {
 
 export default function Step5Image({ article, onConfirmed }: Props) {
   const [imagePrompt, setImagePrompt] = useState(article.image_prompt || '');
+  const [promptJSON, setPromptJSON] = useState<ImagePromptJSON>(() => {
+    try { return JSON.parse(article.image_prompt || ''); } catch { return { ...EMPTY_PROMPT_JSON }; }
+  });
+  const isJSONPrompt = (s: string) => { try { const p = JSON.parse(s); return !!p.mo_ta_canh; } catch { return false; } };
+
+  // Sync promptJSON → imagePrompt string
+  const updatePromptField = (field: keyof ImagePromptJSON, value: string) => {
+    const next = { ...promptJSON, [field]: value };
+    setPromptJSON(next);
+    setImagePrompt(JSON.stringify(next, null, 2));
+  };
   const [imageAI, setImageAI] = useState<string>('gpt-image-2');
   const [imageModels, setImageModels] = useState<ImageModelInfo[]>(DEFAULT_IMAGE_MODELS);
   const [imageSize, setImageSize] = useState('1792x1024');
@@ -125,6 +144,12 @@ export default function Step5Image({ article, onConfirmed }: Props) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
       setImagePrompt(json.image_prompt);
+      // Parse JSON nếu có
+      if (json.image_prompt_json) {
+        setPromptJSON(json.image_prompt_json);
+      } else {
+        try { setPromptJSON(JSON.parse(json.image_prompt)); } catch { /* raw string */ }
+      }
     } catch (e: unknown) {
       setError((e as Error).message);
     } finally {
@@ -264,23 +289,77 @@ export default function Step5Image({ article, onConfirmed }: Props) {
 
       {/* Image Prompt */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-gray-300">Image Prompt (tiếng Anh)</label>
+        <div className="flex items-center justify-between mb-3">
+          <label className="text-sm font-medium text-gray-300">✨ Mô tả ảnh (tiếng Việt)</label>
           <button
             onClick={generatePrompt}
             disabled={generatingPrompt}
             className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
           >
             {generatingPrompt ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            Sinh lại prompt
+            Sinh lại bằng AI
           </button>
         </div>
+
         {generatingPrompt ? (
           <div className="bg-gray-900 rounded-xl p-6 flex items-center gap-3 border border-gray-700">
             <Loader2 size={18} className="animate-spin text-blue-400" />
-            <span className="text-sm text-gray-400">AI đang tạo image prompt...</span>
+            <span className="text-sm text-gray-400">AI đang tạo mô tả ảnh...</span>
+          </div>
+        ) : isJSONPrompt(imagePrompt) ? (
+          /* JSON Form Editor */
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">🏙️ Mô tả cảnh vật / đối tượng <span className="text-red-400">*</span></label>
+                <textarea
+                  value={promptJSON.mo_ta_canh}
+                  onChange={(e) => updatePromptField('mo_ta_canh', e.target.value)}
+                  placeholder="VD: Một người đang làm việc trên laptop tại bàn làm việc hiện đại..."
+                  rows={3}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">🎨 Phong cách ảnh</label>
+                  <input
+                    value={promptJSON.phong_cach}
+                    onChange={(e) => updatePromptField('phong_cach', e.target.value)}
+                    placeholder="Ảnh thực tế chuyên nghiệp, ánh sáng tự nhiên"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">🎨 Màu sắc chủ đạo</label>
+                  <input
+                    value={promptJSON.mau_sac}
+                    onChange={(e) => updatePromptField('mau_sac', e.target.value)}
+                    placeholder="Tông xanh lá và trắng, tươi sáng"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">➕ Yêu cầu bổ sung</label>
+                <input
+                  value={promptJSON.bo_sung}
+                  onChange={(e) => updatePromptField('bo_sung', e.target.value)}
+                  placeholder="Không có chữ trong ảnh, góc chụp ngang, chất lượng cao"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+            {/* Raw JSON preview collapsible */}
+            <details className="group">
+              <summary className="text-xs text-gray-600 hover:text-gray-400 cursor-pointer select-none">
+                ▶ Xem prompt sẽ gửi cho AI (tiếng Anh)
+              </summary>
+              <pre className="mt-2 bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-[10px] text-gray-500 font-mono overflow-x-auto whitespace-pre-wrap">{imagePrompt}</pre>
+            </details>
           </div>
         ) : (
+          /* Raw text fallback */
           <textarea
             value={imagePrompt}
             onChange={(e) => setImagePrompt(e.target.value)}
