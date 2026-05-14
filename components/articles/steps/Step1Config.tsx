@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Article, ArticleType, ArticleTone, AIModel } from '@/types';
 import { Loader2, ChevronRight, Zap, BookOpen, List, Star, GitCompare, HelpCircle, Layers } from 'lucide-react';
@@ -53,12 +53,24 @@ export default function Step1Config({ article, initialKeyword, initialKeywordId,
   const [loading, setLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState('');
+  const [maxBatch, setMaxBatch] = useState(20); // default cao, fetch từ settings
+
+  // Fetch max_concurrent_jobs từ settings
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((json) => {
+        const val = json?.max_concurrent_jobs;
+        if (val && typeof val === 'number' && val > 0) setMaxBatch(val);
+      })
+      .catch(() => {});
+  }, []);
 
   const parsedBatchKeywords = batchKeywords
     .split('\n')
     .map((k) => k.trim())
     .filter(Boolean)
-    .slice(0, 5);
+    .slice(0, maxBatch);
 
   const buildPayload = (kw: string, kwId?: string) => ({
     keyword: kw,
@@ -176,11 +188,11 @@ export default function Step1Config({ article, initialKeyword, initialKeywordId,
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium text-gray-300">
-              Danh sách từ khóa * <span className="text-gray-500">(mỗi dòng 1 từ, tối đa 5)</span>
+              Danh sách từ khóa * <span className="text-gray-500">(mỗi dòng 1 từ, tối đa {maxBatch})</span>
             </label>
             <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full',
-              parsedBatchKeywords.length >= 5 ? 'bg-red-900 text-red-300' : 'bg-gray-800 text-gray-400')}>
-              {parsedBatchKeywords.length}/5
+              parsedBatchKeywords.length >= maxBatch ? 'bg-red-900 text-red-300' : 'bg-gray-800 text-gray-400')}>
+              {parsedBatchKeywords.length}/{maxBatch}
             </span>
           </div>
           <textarea
