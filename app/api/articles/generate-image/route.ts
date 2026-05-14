@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, getSettings } from '@/lib/supabase';
-import { generateImageDALLE3, generateImageGPTImage1 } from '@/lib/ai/openai';
+import { generateImageOpenAI } from '@/lib/ai/openai';
 import { generateImageGemini } from '@/lib/ai/gemini';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
     const { article_id, image_prompt, image_ai, image_size }: {
       article_id: string;
       image_prompt: string;
-      image_ai: 'dalle3' | 'gemini-imagen' | 'gpt-image-1';
+      image_ai: string; // any OpenAI image model ID or 'gemini-imagen'
       image_size?: string;
     } = await req.json();
 
@@ -25,15 +27,14 @@ export async function POST(req: NextRequest) {
     let imageSourceUrl: string;
 
     try {
-      if (image_ai === 'dalle3') {
-        if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
-        imageSourceUrl = await generateImageDALLE3(settings.openai_api_key, image_prompt, image_size);
-      } else if (image_ai === 'gpt-image-1') {
-        if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
-        imageSourceUrl = await generateImageGPTImage1(settings.openai_api_key, image_prompt, image_size);
-      } else {
+      if (image_ai === 'gemini-imagen') {
         if (!settings.gemini_api_key) throw new Error('Gemini API key chưa được cấu hình');
         imageSourceUrl = await generateImageGemini(settings.gemini_api_key, image_prompt);
+      } else {
+        // All OpenAI image models: gpt-image-1, gpt-image-1-mini, gpt-image-1.5,
+        // gpt-image-2, gpt-image-2-2026-04-21, chatgpt-image-latest, dall-e-3, dall-e-2
+        if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
+        imageSourceUrl = await generateImageOpenAI(settings.openai_api_key, image_ai, image_prompt, image_size);
       }
     } catch (e: unknown) {
       const msg = (e as Error).message;

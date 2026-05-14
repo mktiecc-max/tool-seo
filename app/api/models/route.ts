@@ -34,11 +34,16 @@ const ANTHROPIC_MODELS: ModelInfo[] = [
   { id: 'claude-3-opus-20240229',       name: 'Claude 3 Opus',           provider: 'anthropic', type: 'text', description: 'Thế hệ cũ, mạnh' },
 ];
 
-// OpenAI image models — curated list
+// OpenAI image models — curated list (synced with API screenshot May 2026)
 const OPENAI_IMAGE_MODELS: ModelInfo[] = [
-  { id: 'gpt-image-1', name: 'GPT Image 1 (ChatGPT Image)', provider: 'openai', type: 'image', description: 'Model ChatGPT dùng, ảnh thực tế nhất', isNew: true },
-  { id: 'dall-e-3',    name: 'DALL-E 3',                    provider: 'openai', type: 'image', description: 'Ổn định, hỗ trợ nhiều style' },
-  { id: 'dall-e-2',    name: 'DALL-E 2',                    provider: 'openai', type: 'image', description: 'Cũ hơn, rẻ hơn' },
+  { id: 'gpt-image-2',              name: 'GPT Image 2',               provider: 'openai', type: 'image', description: 'Mới nhất, chất lượng cao', isNew: true },
+  { id: 'gpt-image-2-2026-04-21',   name: 'GPT Image 2 (Apr 2026)',    provider: 'openai', type: 'image', description: 'Snapshot ổn định', isNew: true },
+  { id: 'chatgpt-image-latest',     name: 'ChatGPT Image Latest',      provider: 'openai', type: 'image', description: 'Luôn dùng phiên bản mới nhất', isNew: true },
+  { id: 'gpt-image-1',              name: 'GPT Image 1',               provider: 'openai', type: 'image', description: 'Model ChatGPT dùng, thực tế nhất' },
+  { id: 'gpt-image-1.5',            name: 'GPT Image 1.5',             provider: 'openai', type: 'image', description: 'Cải tiến từ GPT Image 1', isNew: true },
+  { id: 'gpt-image-1-mini',         name: 'GPT Image 1 Mini',          provider: 'openai', type: 'image', description: 'Nhanh hơn, rẻ hơn', isNew: true },
+  { id: 'dall-e-3',                 name: 'DALL-E 3',                  provider: 'openai', type: 'image', description: 'Ổn định, nhiều style' },
+  { id: 'dall-e-2',                 name: 'DALL-E 2',                  provider: 'openai', type: 'image', description: 'Cũ hơn, rẻ hơn' },
 ];
 
 // ── Fetch OpenAI models dynamically ─────────────────────────────────────────

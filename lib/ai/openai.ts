@@ -134,6 +134,77 @@ export async function generateImageGPTImage1(
 }
 
 /**
+ * Generic OpenAI image generation — supports ALL current image models:
+ * gpt-image-1, gpt-image-1-mini, gpt-image-1.5, gpt-image-2,
+ * gpt-image-2-2026-04-21, chatgpt-image-latest, dall-e-3, dall-e-2
+ */
+export async function generateImageOpenAI(
+  apiKey: string,
+  modelId: string,
+  prompt: string,
+  size?: string
+): Promise<string> {
+  const client = new OpenAI({ apiKey });
+
+  // dall-e-3 only supports specific sizes and b64_json
+  if (modelId === 'dall-e-3') {
+    const allowedSizes = ['1024x1024', '1792x1024', '1024x1792'] as const;
+    type DalleSize = typeof allowedSizes[number];
+    const imageSize: DalleSize = allowedSizes.includes(size as DalleSize)
+      ? (size as DalleSize)
+      : '1792x1024';
+    const response = await client.images.generate({
+      model: 'dall-e-3',
+      prompt,
+      size: imageSize,
+      quality: 'standard',
+      n: 1,
+      response_format: 'b64_json',
+    });
+    const b64 = response.data?.[0]?.b64_json;
+    if (!b64) throw new Error('DALL-E 3 did not return image data');
+    return `data:image/png;base64,${b64}`;
+  }
+
+  // dall-e-2
+  if (modelId === 'dall-e-2') {
+    const allowedSizes = ['256x256', '512x512', '1024x1024'] as const;
+    type D2Size = typeof allowedSizes[number];
+    const imageSize: D2Size = '1024x1024';
+    const response = await client.images.generate({
+      model: 'dall-e-2',
+      prompt,
+      size: imageSize,
+      n: 1,
+      response_format: 'b64_json',
+    });
+    const b64 = response.data?.[0]?.b64_json;
+    if (!b64) throw new Error('DALL-E 2 did not return image data');
+    return `data:image/png;base64,${b64}`;
+  }
+
+  // All gpt-image-* and chatgpt-image-latest models
+  const sizeMap: Record<string, string> = {
+    '1792x1024': '1536x1024',
+    '1024x1792': '1024x1536',
+    '1024x1024': '1024x1024',
+  };
+  const imageSize = sizeMap[size || '1792x1024'] || '1536x1024';
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response = await (client.images.generate as any)({
+    model: modelId,
+    prompt,
+    size: imageSize,
+    quality: 'high',
+    n: 1,
+  });
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) throw new Error(`${modelId} did not return image data`);
+  return `data:image/png;base64,${b64}`;
+}
+
+/**
  * Generate a new image inspired by a reference image using gpt-image-1 (image editing/variation).
  * referenceImageBase64: base64-encoded PNG/JPG (without data: prefix)
  * referenceImageMime: e.g. 'image/png'
