@@ -50,7 +50,12 @@ async function signJWT(payload: Record<string, unknown>, privateKeyPem: string):
 
 async function getAccessToken(): Promise<string> {
   const email = process.env.GOOGLE_SA_EMAIL;
-  const key = process.env.GOOGLE_SA_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  // Normalize private key: handle \\n (Vercel), \r\n (Windows), and literal newlines
+  const rawKey = process.env.GOOGLE_SA_PRIVATE_KEY ?? '';
+  const key = rawKey
+    .replace(/\\n/g, '\n')   // escaped newlines from env vars
+    .replace(/\r\n/g, '\n')  // Windows CRLF
+    .trim();
   if (!email || !key) throw new Error('GOOGLE_SA_EMAIL or GOOGLE_SA_PRIVATE_KEY env var missing');
 
   const now = Math.floor(Date.now() / 1000);

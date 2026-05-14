@@ -3,6 +3,9 @@ import { createServerClient } from '@/lib/supabase';
 import { sheetsGet, sheetsAppend, sheetsUpdate } from '@/lib/google-sheets';
 import { Article } from '@/types';
 
+// Force Node.js runtime so crypto.subtle (used for JWT signing) is available
+export const runtime = 'nodejs';
+
 /**
  * Sheet structure (5 data columns + metadata):
  * A = Từ khóa
@@ -57,10 +60,11 @@ function articleToRow(a: Article): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  // Always return JSON — never let an unhandled exception produce an HTML response
   try {
     if (!process.env.GOOGLE_SHEET_ID || !process.env.GOOGLE_SA_EMAIL || !process.env.GOOGLE_SA_PRIVATE_KEY) {
       return NextResponse.json({
-        error: 'Google Sheets chưa được cấu hình. Vui lòng thêm GOOGLE_SHEET_ID, GOOGLE_SA_EMAIL, GOOGLE_SA_PRIVATE_KEY vào .env.local.',
+        error: 'Google Sheets chưa được cấu hình. Vui lòng thêm GOOGLE_SHEET_ID, GOOGLE_SA_EMAIL, GOOGLE_SA_PRIVATE_KEY vào Vercel Environment Variables.',
       }, { status: 503 });
     }
 
@@ -142,6 +146,8 @@ export async function POST(req: NextRequest) {
       sheetUrl: `https://docs.google.com/spreadsheets/d/${process.env.GOOGLE_SHEET_ID}`,
     });
   } catch (err: unknown) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[sync-sheets] Error:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
