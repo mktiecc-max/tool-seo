@@ -2,12 +2,29 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Article, ImageAI } from '@/types';
+import { Article } from '@/types';
 import {
   Loader2, RefreshCw, Upload, CheckCircle2, AlertCircle,
-  Image as ImageIcon, Wand2, X, ArrowRight,
+  Image as ImageIcon, Wand2, X, ArrowRight, SkipForward,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+interface ImageModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  description?: string;
+  isNew?: boolean;
+}
+
+const DEFAULT_IMAGE_MODELS: ImageModelInfo[] = [
+  { id: 'gpt-image-2',          name: 'GPT Image 2',          provider: 'openai', description: 'Mới nhất, chất lượng cao', isNew: true },
+  { id: 'chatgpt-image-latest', name: 'ChatGPT Image Latest', provider: 'openai', description: 'Luôn mới nhất', isNew: true },
+  { id: 'gpt-image-1',          name: 'GPT Image 1',          provider: 'openai', description: 'ChatGPT Image, thực tế' },
+  { id: 'gpt-image-1-mini',     name: 'GPT Image 1 Mini',     provider: 'openai', description: 'Nhanh hơn, rẻ hơn', isNew: true },
+  { id: 'dall-e-3',             name: 'DALL-E 3',             provider: 'openai', description: 'Ổn định, nhiều style' },
+  { id: 'gemini-imagen',        name: 'Gemini Imagen',        provider: 'gemini', description: 'Google, chất lượng cao' },
+];
 
 interface Props {
   article: Article;
@@ -45,15 +62,40 @@ function fileToBase64(file: File): Promise<{ base64: string; mime: string }> {
 
 export default function Step5Image({ article, onConfirmed }: Props) {
   const [imagePrompt, setImagePrompt] = useState(article.image_prompt || '');
-  const [imageAI, setImageAI] = useState<ImageAI>('gpt-image-1');
+  const [imageAI, setImageAI] = useState<string>('gpt-image-2');
+  const [imageModels, setImageModels] = useState<ImageModelInfo[]>(DEFAULT_IMAGE_MODELS);
   const [imageSize, setImageSize] = useState('1792x1024');
   const [imageType, setImageType] = useState('photo');
   const [imageUrl, setImageUrl] = useState(article.image_url || '');
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState('');
   const promptGenerated = useRef(false);
+
+  // Fetch dynamic model list
+  useEffect(() => {
+    fetch('/api/models?category=image')
+      .then((r) => r.json())
+      .then((json) => {
+        const seen = new Set<string>();
+        const models: ImageModelInfo[] = [];
+        const geminiMap: Record<string, string> = {
+          'imagen-3.0-generate-002': 'gemini-imagen',
+          'imagen-4.0-generate-preview-05-20': 'gemini-imagen',
+        };
+        for (const m of (json.openai || [])) {
+          if (!seen.has(m.id)) { seen.add(m.id); models.push(m); }
+        }
+        for (const m of (json.gemini || [])) {
+          const id = geminiMap[m.id] || m.id;
+          if (!seen.has(id)) { seen.add(id); models.push({ ...m, id }); }
+        }
+        if (models.length > 0) setImageModels(models);
+      })
+      .catch(() => {});
+  }, []);
 
   // Reference image upload state
   const [referenceMode, setReferenceMode] = useState(false);
@@ -295,32 +337,34 @@ export default function Step5Image({ article, onConfirmed }: Props) {
       {/* Choose AI */}
       <div>
         <label className="text-sm font-medium text-gray-300 block mb-3">Chọn AI tạo ảnh</label>
-        <div className="grid grid-cols-3 gap-3 mb-4">
-        {[
-            { value: 'gpt-image-1' as ImageAI, label: 'GPT Image 1', sub: 'OpenAI · Siêu thực · ChatGPT dùng', color: 'from-violet-500 to-purple-600', badge: '✦ Mới nhất' },
-            { value: 'dalle3' as ImageAI, label: 'DALL-E 3', sub: 'OpenAI · Sáng tạo / Minh họa', color: 'from-emerald-500 to-teal-500', badge: null },
-            { value: 'gemini-imagen' as ImageAI, label: 'Gemini Imagen', sub: 'Google · High quality', color: 'from-blue-500 to-indigo-500', badge: null },
-          ].map((ai) => (
-            <button
-              key={ai.value}
-              onClick={() => setImageAI(ai.value)}
-              className={cn(
-                'p-4 rounded-xl border-2 text-left transition-all relative',
-                imageAI === ai.value
-                  ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
-              )}
-            >
-              {ai.badge && (
-                <span className="absolute top-2 right-2 text-[10px] bg-violet-600 text-white px-1.5 py-0.5 rounded-full font-medium">{ai.badge}</span>
-              )}
-              <div className={`w-8 h-8 bg-gradient-to-br ${ai.color} rounded-lg mb-2 flex items-center justify-center`}>
-                <ImageIcon size={14} className="text-white" />
-              </div>
-              <p className="font-semibold text-sm text-gray-200">{ai.label}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{ai.sub}</p>
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-2 mb-4 max-h-64 overflow-y-auto pr-1">
+          {imageModels.map((m) => {
+            const isOpenAI = m.provider === 'openai';
+            const color = isOpenAI ? 'from-violet-500 to-purple-600' : 'from-blue-500 to-indigo-500';
+            return (
+              <button
+                key={m.id}
+                onClick={() => setImageAI(m.id)}
+                className={cn(
+                  'flex items-center gap-2.5 p-3 rounded-xl border-2 text-left transition-all relative',
+                  imageAI === m.id
+                    ? 'border-blue-500 bg-blue-500/10'
+                    : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
+                )}
+              >
+                {m.isNew && (
+                  <span className="absolute top-1.5 right-1.5 text-[9px] bg-violet-600 text-white px-1 py-0.5 rounded-full font-bold">MỚI</span>
+                )}
+                <div className={`w-7 h-7 bg-gradient-to-br ${color} rounded-lg flex-shrink-0 flex items-center justify-center`}>
+                  <ImageIcon size={12} className="text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-xs text-gray-200 truncate">{m.name}</p>
+                  {m.description && <p className="text-[10px] text-gray-500 mt-0.5 truncate">{m.description}</p>}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {/* Preview info */}
@@ -488,14 +532,43 @@ export default function Step5Image({ article, onConfirmed }: Props) {
         </div>
       )}
 
-      <button
-        onClick={handleConfirm}
-        disabled={confirming || !imageUrl}
-        className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 disabled:opacity-50 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/25"
-      >
-        {confirming ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-        {confirming ? 'Đang xác nhận...' : 'Dùng ảnh này →'}
-      </button>
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={handleConfirm}
+          disabled={confirming || !imageUrl}
+          className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 disabled:opacity-50 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/25"
+        >
+          {confirming ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+          {confirming ? 'Đang xác nhận...' : 'Dùng ảnh này → Đăng bài'}
+        </button>
+
+        {/* Skip image step */}
+        <button
+          onClick={async () => {
+            setSkipping(true);
+            setError('');
+            try {
+              const res = await fetch('/api/articles/confirm-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ article_id: article.id, image_url: imageUrl || null, skip_image: true }),
+              });
+              const json = await res.json();
+              if (!res.ok) throw new Error(json.error);
+              onConfirmed(json.article);
+            } catch (e: unknown) {
+              setError((e as Error).message);
+            } finally {
+              setSkipping(false);
+            }
+          }}
+          disabled={skipping}
+          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 text-sm font-medium rounded-xl border border-gray-600 transition-colors"
+        >
+          {skipping ? <Loader2 size={14} className="animate-spin" /> : <SkipForward size={14} />}
+          {skipping ? 'Đang xử lý...' : 'Bỏ qua ảnh → Đăng WordPress ngay'}
+        </button>
+      </div>
     </div>
   );
 }

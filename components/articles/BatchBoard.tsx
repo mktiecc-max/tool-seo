@@ -93,7 +93,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
           fetch('/api/articles/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ article_id: a.id, image_prompt, image_ai: 'dalle3' }),
+            body: JSON.stringify({ article_id: a.id, image_prompt, image_ai: 'gpt-image-2' }),
           }).catch(() => {});
           handleUpdate({ ...a, status: 'generating_image' });
         } catch { /* ignore */ }

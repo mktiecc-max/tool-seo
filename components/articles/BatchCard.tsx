@@ -5,7 +5,7 @@ import { Article, OutlineJSON, OutlineSection } from '@/types';
 import {
   Loader2, RefreshCw, Trash2, CheckCircle2, ChevronRight,
   FileText, ImageIcon, Globe, AlertCircle, ExternalLink, Eye, EyeOff,
-  Send, Pencil, Plus, MessageSquare, X, GripVertical, Sheet,
+  Send, Pencil, Plus, MessageSquare, X, GripVertical, Sheet, SkipForward, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -800,7 +800,7 @@ export default function BatchCard({ article: initialArticle, selected = false, o
                 className="flex items-center justify-center gap-2 w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors"
               >
                 {loading ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                Dùng ảnh → Đăng bài
+                Dùng ảnh này → Đăng bài
               </button>
             ) : (
               <a
@@ -810,6 +810,52 @@ export default function BatchCard({ article: initialArticle, selected = false, o
                 <ImageIcon size={12} /> Tạo ảnh trong chi tiết
               </a>
             )}
+
+            {/* Upload custom image */}
+            <label className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-xl border border-gray-700 transition-colors cursor-pointer">
+              <Upload size={11} /> Upload ảnh riêng
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setLoading(true);
+                  setError('');
+                  try {
+                    const fd = new FormData();
+                    fd.append('article_id', article.id);
+                    fd.append('file', file);
+                    const res = await fetch('/api/articles/upload-image', { method: 'POST', body: fd });
+                    const json = await res.json();
+                    if (!res.ok) throw new Error(json.error);
+                    const updated = { ...article, image_url: json.image_url };
+                    setArticle(updated);
+                    onUpdate(updated);
+                  } catch (e2: unknown) {
+                    setError((e2 as Error).message);
+                  } finally {
+                    setLoading(false);
+                    e.target.value = '';
+                  }
+                }}
+              />
+            </label>
+
+            {/* Skip image — publish without image */}
+            <button
+              onClick={() => call(
+                '/api/articles/confirm-image',
+                { article_id: article.id, image_url: null, skip_image: true },
+                (json) => update(json.article as Article)
+              )}
+              disabled={loading}
+              className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-gray-800 hover:bg-amber-900/40 disabled:opacity-50 text-gray-400 hover:text-amber-300 text-xs rounded-xl border border-gray-700 hover:border-amber-700 transition-colors"
+            >
+              <SkipForward size={11} /> Bỏ qua ảnh → Đăng WP ngay
+            </button>
+
             <a
               href={`/articles/${article.id}`}
               target="_blank"
