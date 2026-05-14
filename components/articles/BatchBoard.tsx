@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Article } from '@/types';
 import BatchCard from './BatchCard';
-import { Download, CheckCircle, Clock, Loader2, Layers, Play, ExternalLink, CheckSquare, Square, RefreshCw } from 'lucide-react';
+import { Download, CheckCircle, Clock, Loader2, Layers, Play, ExternalLink, CheckSquare, Square, RefreshCw, SkipForward } from 'lucide-react';
 
 interface Props {
   initialArticles: Article[];
@@ -17,7 +17,8 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
   const [syncResult, setSyncResult] = useState<{ inserted: number; updated: number } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
-  const cardRefs = useRef<Record<string, { approveOutline: () => void; generateContent: (a: Article) => void }>>({});
+  const [bulkSkipping, setBulkSkipping] = useState(false);
+  const cardRefs = useRef<Record<string, { approveOutline: () => void; generateContent: (a: Article) => void }>>();;
 
   const handleUpdate = useCallback((updated: Article) => {
     setArticles((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
@@ -104,6 +105,33 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
     setBulkRunning(false);
   };
 
+  // Bỏ qua ảnh → Đăng WP ngay cho tất cả bài được chọn
+  const handleBulkSkipImage = async () => {
+    // Áp dụng cho bài ở image_review hoặc content_review (chưa có ảnh)
+    const targets = articles.filter(
+      (a) => selectedIds.has(a.id) &&
+        (a.status === 'image_review' || a.status === 'content_review')
+    );
+    if (targets.length === 0) return;
+    setBulkSkipping(true);
+    await Promise.allSettled(
+      targets.map(async (a) => {
+        try {
+          const res = await fetch('/api/articles/confirm-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ article_id: a.id, image_url: null, skip_image: true }),
+          });
+          if (!res.ok) return;
+          const json = await res.json();
+          handleUpdate(json.article);
+        } catch { /* ignore */ }
+      })
+    );
+    setSelectedIds(new Set());
+    setBulkSkipping(false);
+  };
+
   const handleSyncSheets = async () => {
     const ids = selectedIds.size > 0 ? Array.from(selectedIds) : articles.map((a) => a.id);
     setSyncing(true);
@@ -181,6 +209,12 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
 
   // Show the bulk button whenever ANY article is selected
   const showBulkButton = selectedIds.size > 0;
+
+  // Count selected articles eligible for skip-image bulk action
+  const skipImageCount = articles.filter(
+    (a) => selectedIds.has(a.id) &&
+      (a.status === 'image_review' || a.status === 'content_review')
+  ).length;
 
   if (articles.length === 0) {
     return (
@@ -279,6 +313,19 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
               {bulkRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
               {bulkRunning ? 'Đang chạy...' : bulkRunnable > 0 ? bulkRunLabel() : `Duyệt & Viết ${selectedIds.size} bài`}
             </button>
+
+            {/* Skip image → publish directly */}
+            {skipImageCount > 0 && (
+              <button
+                onClick={handleBulkSkipImage}
+                disabled={bulkSkipping}
+                className="flex items-center gap-2 px-4 py-1.5 bg-gray-700 hover:bg-amber-900/50 disabled:opacity-40 text-gray-300 hover:text-amber-300 text-xs font-semibold rounded-lg border border-gray-600 hover:border-amber-700 transition-colors"
+              >
+                {bulkSkipping ? <Loader2 size={12} className="animate-spin" /> : <SkipForward size={12} />}
+                {bulkSkipping ? 'Đang đăng...' : `Bỏ qua ảnh → Đăng ${skipImageCount} bài`}
+              </button>
+            )}
+
             <button
               onClick={() => setSelectedIds(new Set())}
               className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
