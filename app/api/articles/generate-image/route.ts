@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const { article_id, image_prompt, image_ai, image_size }: {
       article_id: string;
       image_prompt: string;
-      image_ai: string; // any OpenAI image model ID or 'gemini-imagen'
+      image_ai: string;
       image_size?: string;
     } = await req.json();
 
@@ -22,17 +22,28 @@ export async function POST(req: NextRequest) {
     if (!settings) return NextResponse.json({ error: 'Không lấy được cấu hình' }, { status: 500 });
 
     const db = createServerClient();
+
+    // ── Check 1: bài còn tồn tại không? ─────────────────────────────────────
+    const { data: existsBefore } = await db
+      .from('articles')
+      .select('id')
+      .eq('id', article_id)
+      .maybeSingle();
+
+    if (!existsBefore) {
+      console.log(`[generate-image] Article ${article_id} đã bị xóa, bỏ qua.`);
+      return NextResponse.json({ skipped: true }, { status: 200 });
+    }
+
     await db.from('articles').update({ status: 'generating_image', image_prompt }).eq('id', article_id);
 
+    // ── Gọi AI API (có thể mất 15–60s) ──────────────────────────────────────
     let imageSourceUrl: string;
-
     try {
       if (image_ai === 'gemini-imagen') {
         if (!settings.gemini_api_key) throw new Error('Gemini API key chưa được cấu hình');
         imageSourceUrl = await generateImageGemini(settings.gemini_api_key, image_prompt);
       } else {
-        // All OpenAI image models: gpt-image-1, gpt-image-1-mini, gpt-image-1.5,
-        // gpt-image-2, gpt-image-2-2026-04-21, chatgpt-image-latest, dall-e-3, dall-e-2
         if (!settings.openai_api_key) throw new Error('OpenAI API key chưa được cấu hình');
         imageSourceUrl = await generateImageOpenAI(settings.openai_api_key, image_ai, image_prompt, image_size);
       }
@@ -48,7 +59,19 @@ export async function POST(req: NextRequest) {
       throw e;
     }
 
-    // Upload to Supabase Storage
+    // ── Check 2: bài vẫn còn sau khi AI xong không? ──────────────────────────
+    const { data: existsAfter } = await db
+      .from('articles')
+      .select('id')
+      .eq('id', article_id)
+      .maybeSingle();
+
+    if (!existsAfter) {
+      console.log(`[generate-image] Article ${article_id} bị xóa trong lúc AI đang chạy, bỏ qua upload.`);
+      return NextResponse.json({ skipped: true }, { status: 200 });
+    }
+
+    // ── Upload to Supabase Storage ────────────────────────────────────────────
     const imageBuffer = await fetchImageBuffer(imageSourceUrl);
     const ext = imageSourceUrl.startsWith('data:image/png') ? 'png' : 'jpg';
     const filename = `articles/${article_id}/featured-${Date.now()}.${ext}`;
@@ -86,3 +109,4 @@ async function fetchImageBuffer(url: string): Promise<Buffer> {
   if (!res.ok) throw new Error(`Failed to download image: ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
 }
+
