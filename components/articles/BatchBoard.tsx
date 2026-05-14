@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Article } from '@/types';
 import BatchCard from './BatchCard';
-import { Download, CheckCircle, Clock, Loader2, Layers, Play, ExternalLink, CheckSquare, Square, RefreshCw, SkipForward } from 'lucide-react';
+import {
+  Download, CheckCircle, Clock, Loader2, Layers, Play,
+  ExternalLink, CheckSquare, Square, RefreshCw, SkipForward,
+} from 'lucide-react';
+import { PROCESSING_STATUSES, REVIEW_STATUSES, DEFAULT_IMAGE_MODEL } from '@/lib/constants';
+import { supabase } from '@/lib/supabase';
+
+// Trạng thái bài có thể được chọn để bulk action
+const NON_SELECTABLE = PROCESSING_STATUSES as readonly string[];
 
 interface Props {
   initialArticles: Article[];
-  sheetUrl?: string; // optional: link to existing Google Sheet
+  sheetUrl?: string;
 }
 
 export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
@@ -18,8 +26,24 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkSkipping, setBulkSkipping] = useState(false);
-  const cardRefs = useRef<Record<string, { approveOutline: () => void; generateContent: (a: Article) => void }>>();;
+  // Model ảnh mặc định đọc từ settings (để bulk action dùng đúng model)
+  const [defaultImageModel, setDefaultImageModel] = useState(DEFAULT_IMAGE_MODEL);
 
+  // Đọc default_image_ai từ Supabase khi mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('settings')
+          .select('default_image_ai')
+          .limit(1)
+          .single();
+        if (data?.default_image_ai) setDefaultImageModel(data.default_image_ai);
+      } catch { /* giữ giá trị mặc định */ }
+    })();
+  }, []);
+
+  // ── Article update/delete handlers ──────────────────────────────────────────
   const handleUpdate = useCallback((updated: Article) => {
     setArticles((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
   }, []);
@@ -29,36 +53,72 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
     setSelectedIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
   }, []);
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const s = new Set(prev);
       if (s.has(id)) s.delete(id); else s.add(id);
       return s;
     });
-  };
+  }, []);
 
-  const selectAll = () => {
-    const selectable = articles.filter((a) => !['generating_content', 'generating_image', 'publishing'].includes(a.status));
+  // ── Derived stats (memo để tránh tính lại mỗi render) ───────────────────────
+  const { stats, selectableCount, bulkRunnable, skipImageCount, outlineCount, contentCount } = useMemo(() => {
+    let done = 0, inProgress = 0, review = 0, failed = 0;
+    let selectable = 0, runnable = 0, skipable = 0, outline = 0, content = 0;
+
+    for (const a of articles) {
+      if (a.status === 'done') done++;
+      else if ((PROCESSING_STATUSES as readonly string[]).includes(a.status)) inProgress++;
+      else if ((REVIEW_STATUSES as readonly string[]).includes(a.status)) review++;
+      else if (a.status === 'failed') failed++;
+
+      if (!NON_SELECTABLE.includes(a.status)) selectable++;
+
+      if (selectedIds.has(a.id)) {
+        if (a.status === 'outline_review') { runnable++; outline++; }
+        if (a.status === 'content_review') { runnable++; content++; }
+        if (a.status === 'image_review' || a.status === 'content_review') skipable++;
+      }
+    }
+
+    return {
+      stats: { done, inProgress, review, failed },
+      selectableCount: selectable,
+      bulkRunnable: runnable,
+      skipImageCount: skipable,
+      outlineCount: outline,
+      contentCount: content,
+    };
+  }, [articles, selectedIds]);
+
+  const selectAll = useCallback(() => {
+    const selectable = articles
+      .filter((a) => !NON_SELECTABLE.includes(a.status))
+      .map((a) => a.id);
     if (selectedIds.size === selectable.length && selectable.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(selectable.map((a) => a.id)));
+      setSelectedIds(new Set(selectable));
     }
-  };
+  }, [articles, selectedIds.size]);
 
-  // Bulk approve outlines for selected cards that are in outline_review
+  // Label động cho nút bulk run
+  const bulkRunLabel = useMemo(() => {
+    if (outlineCount > 0 && contentCount > 0) return `Duyệt & Tiếp tục ${bulkRunnable} bài`;
+    if (outlineCount > 0) return `Duyệt & Viết ${outlineCount} bài`;
+    if (contentCount > 0) return `Tạo ảnh ${contentCount} bài`;
+    return `Duyệt & Viết ${selectedIds.size} bài`;
+  }, [outlineCount, contentCount, bulkRunnable, selectedIds.size]);
+
+  // ── Bulk actions ─────────────────────────────────────────────────────────────
   const handleBulkRun = async () => {
-    const outlineTargets = articles.filter(
-      (a) => selectedIds.has(a.id) && a.status === 'outline_review'
-    );
-    const contentTargets = articles.filter(
-      (a) => selectedIds.has(a.id) && a.status === 'content_review'
-    );
+    const outlineTargets = articles.filter((a) => selectedIds.has(a.id) && a.status === 'outline_review');
+    const contentTargets = articles.filter((a) => selectedIds.has(a.id) && a.status === 'content_review');
     if (outlineTargets.length === 0 && contentTargets.length === 0) return;
     setBulkRunning(true);
 
-    // 1. Approve outlines (outline_review → generate content)
-    await Promise.all(
+    // 1. Duyệt outline → sinh nội dung
+    await Promise.allSettled(
       outlineTargets.map(async (a) => {
         try {
           const res = await fetch('/api/articles/confirm-outline', {
@@ -67,21 +127,21 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
             body: JSON.stringify({ article_id: a.id, outline: a.outline }),
           });
           if (!res.ok) return;
+          // Fire-and-forget content generation
           fetch('/api/articles/generate-content', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ article_id: a.id }),
           }).then((r) => r.body?.cancel()).catch(() => {});
           handleUpdate({ ...a, status: 'generating_content' });
-        } catch { /* ignore */ }
+        } catch { /* ignore per-article error */ }
       })
     );
 
-    // 2. Generate images for content_review articles
-    await Promise.all(
+    // 2. Sinh ảnh cho bài content_review (dùng model từ settings)
+    await Promise.allSettled(
       contentTargets.map(async (a) => {
         try {
-          // First generate image prompt, then trigger image generation
           const promptRes = await fetch('/api/articles/generate-image-prompt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -90,14 +150,14 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
           if (!promptRes.ok) return;
           const { image_prompt } = await promptRes.json();
           if (!image_prompt) return;
-          // Trigger image generation (fire and forget)
+          // Fire-and-forget image generation
           fetch('/api/articles/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ article_id: a.id, image_prompt, image_ai: 'gpt-image-2' }),
+            body: JSON.stringify({ article_id: a.id, image_prompt, image_ai: defaultImageModel }),
           }).catch(() => {});
           handleUpdate({ ...a, status: 'generating_image' });
-        } catch { /* ignore */ }
+        } catch { /* ignore per-article error */ }
       })
     );
 
@@ -105,15 +165,14 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
     setBulkRunning(false);
   };
 
-  // Bỏ qua ảnh → Đăng WP ngay cho tất cả bài được chọn
+  // Bỏ qua ảnh → đăng WP trực tiếp
   const handleBulkSkipImage = async () => {
-    // Áp dụng cho bài ở image_review hoặc content_review (chưa có ảnh)
     const targets = articles.filter(
-      (a) => selectedIds.has(a.id) &&
-        (a.status === 'image_review' || a.status === 'content_review')
+      (a) => selectedIds.has(a.id) && (a.status === 'image_review' || a.status === 'content_review')
     );
     if (targets.length === 0) return;
     setBulkSkipping(true);
+
     await Promise.allSettled(
       targets.map(async (a) => {
         try {
@@ -125,13 +184,15 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
           if (!res.ok) return;
           const json = await res.json();
           handleUpdate(json.article);
-        } catch { /* ignore */ }
+        } catch { /* ignore per-article error */ }
       })
     );
+
     setSelectedIds(new Set());
     setBulkSkipping(false);
   };
 
+  // ── Sheet & CSV export ───────────────────────────────────────────────────────
   const handleSyncSheets = async () => {
     const ids = selectedIds.size > 0 ? Array.from(selectedIds) : articles.map((a) => a.id);
     setSyncing(true);
@@ -177,45 +238,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
     }
   };
 
-  // Stats
-  const stats = {
-    done: articles.filter((a) => a.status === 'done').length,
-    inProgress: articles.filter((a) =>
-      ['generating_content', 'generating_image', 'publishing'].includes(a.status)
-    ).length,
-    review: articles.filter((a) =>
-      ['outline_review', 'content_review', 'image_review'].includes(a.status)
-    ).length,
-    failed: articles.filter((a) => a.status === 'failed').length,
-  };
-
-  const selectableCount = articles.filter(
-    (a) => !['generating_content', 'generating_image', 'publishing'].includes(a.status)
-  ).length;
-
-  // Count selected articles that can be bulk-run (outline_review OR content_review)
-  const bulkRunnable = articles.filter(
-    (a) => selectedIds.has(a.id) && (a.status === 'outline_review' || a.status === 'content_review')
-  ).length;
-
-  const bulkRunLabel = () => {
-    const outlineCount = articles.filter((a) => selectedIds.has(a.id) && a.status === 'outline_review').length;
-    const contentCount = articles.filter((a) => selectedIds.has(a.id) && a.status === 'content_review').length;
-    if (outlineCount > 0 && contentCount > 0) return `Duyệt & Tiếp tục ${bulkRunnable} bài`;
-    if (outlineCount > 0) return `Duyệt & Viết ${outlineCount} bài`;
-    if (contentCount > 0) return `Tạo ảnh ${contentCount} bài`;
-    return `Duyệt & Viết ${selectedIds.size} bài`;
-  };
-
-  // Show the bulk button whenever ANY article is selected
-  const showBulkButton = selectedIds.size > 0;
-
-  // Count selected articles eligible for skip-image bulk action
-  const skipImageCount = articles.filter(
-    (a) => selectedIds.has(a.id) &&
-      (a.status === 'image_review' || a.status === 'content_review')
-  ).length;
-
+  // ── Empty state ──────────────────────────────────────────────────────────────
   if (articles.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-gray-600">
@@ -227,6 +250,8 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
       </div>
     );
   }
+
+  const showBulkActions = selectedIds.size > 0;
 
   return (
     <div className="flex flex-col">
@@ -243,7 +268,9 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
               {stats.done} xong
             </span>
             <span className="flex items-center gap-1">
-              <Loader2 size={11} className="text-blue-400 animate-spin" />
+              {stats.inProgress > 0
+                ? <Loader2 size={11} className="text-blue-400 animate-spin" />
+                : <Loader2 size={11} className="text-gray-700" />}
               {stats.inProgress} đang chạy
             </span>
             <span className="flex items-center gap-1">
@@ -253,6 +280,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
             {stats.failed > 0 && <span className="text-red-400">{stats.failed} lỗi</span>}
           </div>
         </div>
+
         <div className="flex items-center gap-2">
           {sheetUrl && (
             <a
@@ -291,7 +319,6 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
 
       {/* Bulk action bar */}
       <div className="flex items-center gap-3 mb-4 shrink-0">
-        {/* Select all toggle */}
         <button
           onClick={selectAll}
           className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 transition-colors px-3 py-1.5 bg-gray-800 rounded-lg border border-gray-700"
@@ -302,19 +329,21 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
           {selectedIds.size > 0 ? `Đã chọn ${selectedIds.size}/${articles.length}` : 'Chọn tất cả'}
         </button>
 
-        {showBulkButton && (
+        {showBulkActions && (
           <>
             <div className="h-4 w-px bg-gray-700" />
+
+            {/* Duyệt & Tiếp tục */}
             <button
               onClick={handleBulkRun}
               disabled={bulkRunning || bulkRunnable === 0}
               className="flex items-center gap-2 px-4 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors"
             >
               {bulkRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              {bulkRunning ? 'Đang chạy...' : bulkRunnable > 0 ? bulkRunLabel() : `Duyệt & Viết ${selectedIds.size} bài`}
+              {bulkRunning ? 'Đang chạy...' : bulkRunnable > 0 ? bulkRunLabel : `Duyệt & Viết ${selectedIds.size} bài`}
             </button>
 
-            {/* Skip image → publish directly */}
+            {/* Bỏ qua ảnh → Đăng WP */}
             {skipImageCount > 0 && (
               <button
                 onClick={handleBulkSkipImage}
@@ -352,7 +381,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
         </div>
       )}
 
-      {/* Cards — 3-column grid, vertical scroll */}
+      {/* Cards grid */}
       <div className="grid grid-cols-3 gap-4 pb-4">
         {articles.map((article) => (
           <BatchCard
@@ -366,7 +395,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
         ))}
       </div>
 
-      {/* Footer hint */}
+      {/* Footer */}
       <div className="mt-3 shrink-0 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-gray-500 flex items-center gap-2">
         💡 <span>Xuất CSV → Google Sheets → Tệp → Nhập → Upload để đồng bộ dữ liệu</span>
         {sheetUrl && (

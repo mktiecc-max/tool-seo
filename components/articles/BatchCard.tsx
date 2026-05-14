@@ -1,27 +1,24 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Article, OutlineJSON, OutlineSection } from '@/types';
+import { Article, OutlineJSON } from '@/types';
 import {
   Loader2, RefreshCw, Trash2, CheckCircle2, ChevronRight,
   FileText, ImageIcon, Globe, AlertCircle, ExternalLink, Eye, EyeOff,
-  Send, Pencil, Plus, MessageSquare, X, GripVertical, Sheet, SkipForward, Upload,
+  Send, Pencil, Plus, MessageSquare, X, Sheet, SkipForward, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  IMAGE_SIZES as BATCH_IMG_SIZES,
+  IMAGE_TYPES as BATCH_IMG_TYPES,
+  DEFAULT_IMAGE_MODELS,
+  DEFAULT_IMAGE_SIZE,
+  DEFAULT_IMAGE_TYPE,
+  DEFAULT_IMAGE_MODEL,
+  fetchImageModels,
+  type ImageModelInfo,
+} from '@/lib/constants';
 
-const BATCH_IMG_SIZES = [
-  { value: '1024x1024', label: 'Vuông', sub: '1:1' },
-  { value: '1792x1024', label: 'Ngang', sub: '16:9' },
-  { value: '1024x1792', label: 'Dọc', sub: '9:16' },
-];
-
-const BATCH_IMG_TYPES = [
-  { value: 'illustration', label: 'Minh họa', hint: 'flat illustration style, vector art' },
-  { value: 'photo', label: 'Ảnh thực', hint: 'realistic photo, high quality photography' },
-  { value: 'poster', label: 'Poster', hint: 'creative poster design, bold typography' },
-  { value: 'banner', label: 'Banner', hint: 'wide banner design, professional marketing' },
-  { value: 'infographic', label: 'Infographic', hint: 'infographic design, data visualization' },
-];
 
 interface Props {
   article: Article;
@@ -61,21 +58,12 @@ export default function BatchCard({ article: initialArticle, selected = false, o
   const [showOutline, setShowOutline] = useState(true);
   const [showContent, setShowContent] = useState(true);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [imgSize, setImgSize] = useState('1792x1024');
-  const [imgType, setImgType] = useState('illustration');
-  const [imgAI, setImgAI] = useState<string>('gpt-image-2');
+  const [imgSize, setImgSize] = useState(DEFAULT_IMAGE_SIZE);
+  const [imgType, setImgType] = useState(DEFAULT_IMAGE_TYPE);
+  const [imgAI, setImgAI] = useState<string>(DEFAULT_IMAGE_MODEL);
 
-  // Dynamic image model list fetched from API
-  const [imageModels, setImageModels] = useState<{
-    id: string; name: string; provider: string; description?: string; isNew?: boolean;
-  }[]>([
-    { id: 'gpt-image-2',          name: 'GPT Image 2',          provider: 'openai', description: 'Mới nhất, chất lượng cao', isNew: true },
-    { id: 'gpt-image-1',          name: 'GPT Image 1',          provider: 'openai', description: 'ChatGPT Image, thực tế' },
-    { id: 'gpt-image-1-mini',     name: 'GPT Image 1 Mini',     provider: 'openai', description: 'Nhanh hơn, rẻ hơn', isNew: true },
-    { id: 'chatgpt-image-latest', name: 'ChatGPT Image Latest', provider: 'openai', description: 'Luôn mới nhất', isNew: true },
-    { id: 'dall-e-3',             name: 'DALL-E 3',             provider: 'openai', description: 'Ổn định, nhiều style' },
-    { id: 'gemini-imagen',        name: 'Gemini Imagen',        provider: 'gemini', description: 'Google, chất lượng cao' },
-  ]);
+  // Dynamic image model list — dùng fetchImageModels() từ lib/constants (dùng chung với Step5Image)
+  const [imageModels, setImageModels] = useState<ImageModelInfo[]>(DEFAULT_IMAGE_MODELS);
   const [loadingModels, setLoadingModels] = useState(false);
 
   // Google Sheets sync state
@@ -117,46 +105,15 @@ export default function BatchCard({ article: initialArticle, selected = false, o
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, [article.status, article.id, isPolling, onUpdate]);
 
-  // Fetch image models dynamically when reaching content_review
+  // Fetch image models khi bài chuyển sang content_review
   useEffect(() => {
     if (article.status !== 'content_review') return;
     setLoadingModels(true);
-    fetch('/api/models?category=image')
-      .then((r) => r.json())
-      .then((json) => {
-        const models: { id: string; name: string; provider: string; description?: string; isNew?: boolean }[] = [];
-        const seen = new Set<string>();
-
-        // OpenAI models — use IDs directly (generate-image route accepts any string)
-        const geminiIdMap: Record<string, string> = {
-          'imagen-3.0-generate-002': 'gemini-imagen',
-          'imagen-4.0-generate-preview-05-20': 'gemini-imagen',
-        };
-
-        for (const m of (json.openai || [])) {
-          if (!seen.has(m.id)) {
-            seen.add(m.id);
-            models.push(m);
-          }
-        }
-        for (const m of (json.gemini || [])) {
-          const mapped = geminiIdMap[m.id] || m.id;
-          if (!seen.has(mapped)) {
-            seen.add(mapped);
-            models.push({ ...m, id: mapped });
-          }
-        }
-
-        if (models.length > 0) {
-          setImageModels(models);
-          // Keep current selection if still valid, else pick first
-          if (!models.find((x) => x.id === imgAI)) {
-            setImgAI(models[0].id);
-          }
-        }
-      })
-      .catch(() => { /* keep defaults */ })
-      .finally(() => setLoadingModels(false));
+    fetchImageModels().then((models) => {
+      setImageModels(models);
+      // Giữ selection hiện tại nếu còn hợp lệ, nếu không chọn model đầu tiên
+      if (!models.find((x) => x.id === imgAI)) setImgAI(models[0].id);
+    }).finally(() => setLoadingModels(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [article.status]);
 

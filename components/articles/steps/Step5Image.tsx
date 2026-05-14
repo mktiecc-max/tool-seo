@@ -9,6 +9,16 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ImagePromptJSON } from '@/lib/prompts';
+import {
+  IMAGE_SIZES,
+  IMAGE_TYPES,
+  DEFAULT_IMAGE_MODELS,
+  DEFAULT_IMAGE_SIZE,
+  DEFAULT_IMAGE_TYPE,
+  DEFAULT_IMAGE_MODEL,
+  fetchImageModels,
+  type ImageModelInfo,
+} from '@/lib/constants';
 
 const EMPTY_PROMPT_JSON: ImagePromptJSON = {
   mo_ta_canh: '',
@@ -17,42 +27,11 @@ const EMPTY_PROMPT_JSON: ImagePromptJSON = {
   bo_sung: 'Không có chữ trong ảnh, chất lượng cao, góc chụp ngang',
 };
 
-interface ImageModelInfo {
-  id: string;
-  name: string;
-  provider: string;
-  description?: string;
-  isNew?: boolean;
-}
-
-const DEFAULT_IMAGE_MODELS: ImageModelInfo[] = [
-  { id: 'gpt-image-2',          name: 'GPT Image 2',          provider: 'openai', description: 'Mới nhất, chất lượng cao', isNew: true },
-  { id: 'chatgpt-image-latest', name: 'ChatGPT Image Latest', provider: 'openai', description: 'Luôn mới nhất', isNew: true },
-  { id: 'gpt-image-1',          name: 'GPT Image 1',          provider: 'openai', description: 'ChatGPT Image, thực tế' },
-  { id: 'gpt-image-1-mini',     name: 'GPT Image 1 Mini',     provider: 'openai', description: 'Nhanh hơn, rẻ hơn', isNew: true },
-  { id: 'dall-e-3',             name: 'DALL-E 3',             provider: 'openai', description: 'Ổn định, nhiều style' },
-  { id: 'gemini-imagen',        name: 'Gemini Imagen',        provider: 'gemini', description: 'Google, chất lượng cao' },
-];
 
 interface Props {
   article: Article;
   onConfirmed: (article: Article) => void;
 }
-
-const IMAGE_SIZES = [
-  { value: '1024x1024', label: 'Vuông', sub: '1:1 · Blog / Social', icon: '■', aspect: 'aspect-square' },
-  { value: '1792x1024', label: 'Ngang', sub: '16:9 · Banner / Thumbnail', icon: '▬', aspect: 'aspect-video' },
-  { value: '1024x1792', label: 'Dọc', sub: '9:16 · Story / Poster', icon: '▮', aspect: 'aspect-[9/16]' },
-];
-
-const IMAGE_TYPES = [
-  { value: 'illustration', label: 'Ảnh minh họa', hint: 'flat illustration style, vector art' },
-  { value: 'poster', label: 'Poster', hint: 'creative poster design, bold typography' },
-  { value: 'banner', label: 'Banner', hint: 'wide banner design, professional marketing' },
-  { value: 'photo', label: 'Ảnh thực', hint: 'realistic photo, high quality photography, DSLR quality, photorealistic' },
-  { value: 'infographic', label: 'Infographic', hint: 'infographic design, data visualization, clean layout' },
-  { value: 'logo', label: 'Logo / Icon', hint: 'minimal logo design, icon, transparent background' },
-];
 
 // Convert File to base64 string (without data: prefix)
 function fileToBase64(file: File): Promise<{ base64: string; mime: string }> {
@@ -75,16 +54,15 @@ export default function Step5Image({ article, onConfirmed }: Props) {
   });
   const isJSONPrompt = (s: string) => { try { const p = JSON.parse(s); return !!p.mo_ta_canh; } catch { return false; } };
 
-  // Sync promptJSON → imagePrompt string
   const updatePromptField = (field: keyof ImagePromptJSON, value: string) => {
     const next = { ...promptJSON, [field]: value };
     setPromptJSON(next);
     setImagePrompt(JSON.stringify(next, null, 2));
   };
-  const [imageAI, setImageAI] = useState<string>('gpt-image-2');
+  const [imageAI, setImageAI] = useState<string>(DEFAULT_IMAGE_MODEL);
   const [imageModels, setImageModels] = useState<ImageModelInfo[]>(DEFAULT_IMAGE_MODELS);
-  const [imageSize, setImageSize] = useState('1792x1024');
-  const [imageType, setImageType] = useState('photo');
+  const [imageSize, setImageSize] = useState(DEFAULT_IMAGE_SIZE);
+  const [imageType, setImageType] = useState(DEFAULT_IMAGE_TYPE);
   const [imageUrl, setImageUrl] = useState(article.image_url || '');
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
@@ -93,27 +71,13 @@ export default function Step5Image({ article, onConfirmed }: Props) {
   const [error, setError] = useState('');
   const promptGenerated = useRef(false);
 
-  // Fetch dynamic model list
+  // Fetch dynamic model list — d\u00f9ng fetchImageModels() t\u1eeb lib/constants (d\u00f9ng chung v\u1edbi BatchCard)
   useEffect(() => {
-    fetch('/api/models?category=image')
-      .then((r) => r.json())
-      .then((json) => {
-        const seen = new Set<string>();
-        const models: ImageModelInfo[] = [];
-        const geminiMap: Record<string, string> = {
-          'imagen-3.0-generate-002': 'gemini-imagen',
-          'imagen-4.0-generate-preview-05-20': 'gemini-imagen',
-        };
-        for (const m of (json.openai || [])) {
-          if (!seen.has(m.id)) { seen.add(m.id); models.push(m); }
-        }
-        for (const m of (json.gemini || [])) {
-          const id = geminiMap[m.id] || m.id;
-          if (!seen.has(id)) { seen.add(id); models.push({ ...m, id }); }
-        }
-        if (models.length > 0) setImageModels(models);
-      })
-      .catch(() => {});
+    fetchImageModels().then((models) => {
+      setImageModels(models);
+      if (!models.find((m) => m.id === imageAI)) setImageAI(models[0].id);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Reference image upload state
