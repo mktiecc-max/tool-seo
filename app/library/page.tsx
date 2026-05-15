@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Article, ArticleStatus, STATUS_BADGE } from '@/types';
-import { Library, Search, Filter, Loader2, Trash2, Send, ExternalLink, RefreshCw, AlertCircle, CheckSquare, Play, X, FileText, Tag, AlignLeft, Image as ImageIcon } from 'lucide-react';
+import { Library, Search, Filter, Loader2, Trash2, Send, ExternalLink, RefreshCw, AlertCircle, CheckSquare, Play, X, FileText, Tag, AlignLeft, Image as ImageIcon, Sheet } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -66,6 +66,8 @@ export default function LibraryPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; label: string } | null>(null);
   const [deleteResult, setDeleteResult] = useState<{ count: number } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ inserted: number; updated: number; sheetUrl?: string } | null>(null);
 
   const loadArticles = useCallback(async () => {
     const { data } = await supabase
@@ -196,6 +198,28 @@ export default function LibraryPage() {
     await loadArticles();
   };
 
+  // Đồng bộ bài đã chọn về Google Sheet
+  const handleSyncSheets = async () => {
+    const ids = selected.size > 0 ? Array.from(selected) : filtered.map((a) => a.id);
+    if (!ids.length) return;
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/articles/sync-sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_ids: ids }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Sync thất bại');
+      setSyncResult({ inserted: json.inserted, updated: json.updated, sheetUrl: json.sheetUrl });
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const pendingCount = articles.filter((a) => ['ready_to_review', 'in_review', 'outline_review', 'content_review', 'image_review'].includes(a.status)).length;
   const generatingCount = articles.filter((a) =>
     ['configuring', 'generating_outline', 'generating_content', 'generating_image'].includes(a.status)
@@ -248,6 +272,28 @@ export default function LibraryPage() {
             )}
           </p>
           <button onClick={() => setBulkResult(null)} className="ml-auto text-gray-500 hover:text-gray-300">✕</button>
+        </div>
+      )}
+
+      {/* Sync result toast */}
+      {syncResult && (
+        <div className="mb-4 bg-green-950/50 border border-green-800 rounded-xl px-4 py-3 flex items-center gap-3">
+          <Sheet size={16} className="text-green-400" />
+          <p className="text-sm text-gray-300">
+            Sync xong: <span className="text-green-400 font-medium">{syncResult.inserted} bài mới</span>,{' '}
+            <span className="text-blue-400 font-medium">{syncResult.updated} bài cập nhật</span>
+          </p>
+          {syncResult.sheetUrl && (
+            <a
+              href={syncResult.sheetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 transition-colors"
+            >
+              <ExternalLink size={10} /> Mở Sheet ↗
+            </a>
+          )}
+          <button onClick={() => setSyncResult(null)} className="ml-auto text-gray-500 hover:text-gray-300">✕</button>
         </div>
       )}
 
@@ -358,6 +404,14 @@ export default function LibraryPage() {
             className="flex items-center gap-2 px-4 py-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-sm rounded-lg transition-colors font-medium"
           >
             <Trash2 size={13} /> Xóa {selected.size} bài
+          </button>
+          <button
+            onClick={handleSyncSheets}
+            disabled={syncing}
+            className="flex items-center gap-2 px-4 py-1.5 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm rounded-lg transition-colors font-medium"
+          >
+            {syncing ? <Loader2 size={13} className="animate-spin" /> : <Sheet size={13} />}
+            {syncing ? 'Đang sync...' : `Sync ${selected.size} bài → Sheet`}
           </button>
           <button
             onClick={() => setSelected(new Set())}
