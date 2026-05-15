@@ -113,6 +113,10 @@ export interface Settings {
   openai_model?: string;      // e.g. 'gpt-4o', 'gpt-4o-mini', 'o4-mini'
   gemini_model?: string;      // e.g. 'gemini-2.0-flash', 'gemini-2.5-pro'
   anthropic_model?: string;   // e.g. 'claude-opus-4-5', 'claude-3-5-sonnet-20241022'
+  // Google Sheets integration
+  google_sheet_id?: string;
+  google_sa_email?: string;
+  google_sa_private_key?: string;
 }
 
 // ---- Outline ----

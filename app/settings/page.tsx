@@ -66,10 +66,10 @@ export default function SettingsPage() {
   const [testingSheet, setTestingSheet] = useState(false);
   const [sheetTestResult, setSheetTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  // Google Sheets env fields (stored only in .env.local — not in DB)
+  // Google Sheets credentials — lưu vào DB settings
   const [sheetId, setSheetId] = useState('');
   const [saEmail, setSaEmail] = useState('');
-  const [saKey, setSaKey] = useState('');;
+  const [saKey, setSaKey] = useState('');
 
   useEffect(() => {
     loadSettings();
@@ -81,7 +81,13 @@ export default function SettingsPage() {
       // PGRST116 = no rows found (bình thường khi chưa có settings)
       setError(`Lỗi kết nối Supabase: ${error.message}`);
     }
-    if (data) setSettings(data);
+    if (data) {
+      setSettings(data);
+      // Load Google Sheets credentials from DB
+      if (data.google_sheet_id) setSheetId(data.google_sheet_id);
+      if (data.google_sa_email) setSaEmail(data.google_sa_email);
+      if (data.google_sa_private_key) setSaKey(data.google_sa_private_key);
+    }
   }
 
   const handleSave = async () => {
@@ -101,17 +107,29 @@ export default function SettingsPage() {
       }
 
       if (existing?.id) {
-        // Update
+        // Update — include Google Sheets credentials
+        const payload = {
+          ...settings,
+          google_sheet_id: sheetId || undefined,
+          google_sa_email: saEmail || undefined,
+          google_sa_private_key: saKey || undefined,
+        };
         const { error: updateErr } = await supabase
           .from('settings')
-          .update(settings)
+          .update(payload)
           .eq('id', existing.id);
         if (updateErr) throw new Error(`Lỗi cập nhật: ${updateErr.message}`);
       } else {
-        // Insert
+        // Insert — include Google Sheets credentials
+        const payload = {
+          ...settings,
+          google_sheet_id: sheetId || undefined,
+          google_sa_email: saEmail || undefined,
+          google_sa_private_key: saKey || undefined,
+        };
         const { error: insertErr } = await supabase
           .from('settings')
-          .insert(settings);
+          .insert(payload);
         if (insertErr) throw new Error(`Lỗi lưu mới: ${insertErr.message}`);
       }
 
@@ -143,20 +161,23 @@ export default function SettingsPage() {
   };
 
   const testSheetConnection = async () => {
-    if (!sheetId || !saEmail || !saKey) return;
     setTestingSheet(true);
     setSheetTestResult(null);
     try {
-      const res = await fetch('/api/articles/sync-sheets', {
+      const res = await fetch('/api/articles/test-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ article_ids: [] }),
+        body: JSON.stringify({
+          sheet_id: sheetId || undefined,
+          sa_email: saEmail || undefined,
+          sa_key: saKey || undefined,
+        }),
       });
       const json = await res.json();
-      if (res.status === 503) {
-        setSheetTestResult({ ok: false, message: 'Chưa cấu hình env vars. Hãy thêm vào .env.local và restart server.' });
+      if (json.ok) {
+        setSheetTestResult({ ok: true, message: json.message || 'Kết nối Google Sheets thành công!' });
       } else {
-        setSheetTestResult({ ok: true, message: 'Kết nối Google Sheets thành công!' });
+        setSheetTestResult({ ok: false, message: json.message || 'Kết nối thất bại' });
       }
     } catch (e: unknown) {
       setSheetTestResult({ ok: false, message: (e as Error).message });
@@ -254,24 +275,19 @@ export default function SettingsPage() {
             <span className="text-gray-400 font-medium">Từ khóa · Outline · Nội dung · Prompt ảnh · Link WordPress</span>
           </p>
 
-          {/* Setup instructions */}
           <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl p-4 mb-5 space-y-2">
-            <p className="text-xs font-semibold text-blue-300">⚙️ Hướng dẫn cài đặt (thêm vào .env.local)</p>
+            <p className="text-xs font-semibold text-blue-300">⚙️ Hướng dẫn cài đặt</p>
             <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
               <li>Vào <a href="https://console.cloud.google.com/" target="_blank" className="text-blue-400 underline">Google Cloud Console</a> → tạo Project</li>
               <li>Bật <strong className="text-gray-300">Google Sheets API</strong></li>
               <li>Tạo <strong className="text-gray-300">Service Account</strong> → tải file JSON private key</li>
               <li>Chia sẻ Google Sheet với email service account (quyền Editor)</li>
-              <li>Thêm 3 biến sau vào <code className="text-amber-300">.env.local</code> và restart server</li>
+              <li>Nhập 3 giá trị dưới đây rồi bấm <strong className="text-emerald-300">Lưu cài đặt</strong></li>
             </ol>
-            <div className="bg-gray-900/80 rounded-lg p-3 font-mono text-xs text-emerald-300 space-y-0.5 mt-2">
-              <p>GOOGLE_SHEET_ID=<span className="text-gray-400">1BxiM...id_từ_url_sheet</span></p>
-              <p>GOOGLE_SA_EMAIL=<span className="text-gray-400">name@project.iam.gserviceaccount.com</span></p>
-              <p>{`GOOGLE_SA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"`}</p>
-            </div>
           </div>
 
-          {/* Readonly display of current values */}
+
+          {/* Display of current values */}
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1.5">Sheet ID</label>
@@ -300,8 +316,8 @@ export default function SettingsPage() {
                 rows={4}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-gray-300 placeholder-gray-600 font-mono focus:outline-none focus:border-green-500 resize-none"
               />
-              <p className="text-xs text-gray-600 mt-1">
-                ⚠️ Các giá trị này chỉ dùng để tham khảo copy vào .env.local — không lưu vào database vì lý do bảo mật.
+              <p className="text-xs text-gray-500 mt-1">
+                💡 Nhập xong → bấm <strong className="text-emerald-300">Lưu cài đặt</strong> ở trên → rồi bấm <strong className="text-blue-300">Test kết nối</strong>
               </p>
             </div>
 

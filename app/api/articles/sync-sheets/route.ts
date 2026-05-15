@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { sheetsGet, sheetsAppend, sheetsUpdate } from '@/lib/google-sheets';
+import { sheetsGet, sheetsAppend, sheetsUpdate, getCredentials } from '@/lib/google-sheets';
 import { Article } from '@/types';
 
 // Force Node.js runtime so crypto.subtle (used for JWT signing) is available
@@ -100,13 +100,10 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
 }
 
 export async function POST(req: NextRequest) {
+  // Always return JSON — never let an unhandled exception produce an HTML response
   try {
-    if (!process.env.GOOGLE_SHEET_ID || !process.env.GOOGLE_SA_EMAIL || !process.env.GOOGLE_SA_PRIVATE_KEY) {
-      return NextResponse.json({
-        error: 'Google Sheets chưa được cấu hình. Vui lòng thêm GOOGLE_SHEET_ID, GOOGLE_SA_EMAIL, GOOGLE_SA_PRIVATE_KEY vào Vercel Environment Variables.',
-      }, { status: 503 });
-    }
-
+    // Credential resolution is now handled by lib/google-sheets.ts
+    // (reads from DB settings first, then env vars)
     const body = await req.json();
     const article_ids: string[] = body.article_ids ?? [];
     const sync_all: boolean = body.sync_all ?? false;
@@ -203,7 +200,7 @@ export async function POST(req: NextRequest) {
       inserted,
       updated,
       total: articles.length,
-      sheetUrl: `https://docs.google.com/spreadsheets/d/${process.env.GOOGLE_SHEET_ID}`,
+      sheetUrl: `https://docs.google.com/spreadsheets/d/${(await getCredentials()).sheetId}`,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

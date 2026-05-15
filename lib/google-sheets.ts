@@ -2,14 +2,74 @@
  * Google Sheets API helper using Service Account JWT authentication.
  * No external packages needed — uses native crypto + fetch.
  *
- * Required env vars:
- *   GOOGLE_SHEET_ID           — ID from the Sheet URL (the long alphanumeric string)
- *   GOOGLE_SA_EMAIL           — Service account email (xxx@project.iam.gserviceaccount.com)
- *   GOOGLE_SA_PRIVATE_KEY     — Private key from service account JSON (include \n newlines)
+ * Credentials resolution order:
+ *   1. Values passed explicitly via `overrideCredentials`  (used by test-sheet API)
+ *   2. Database settings table (google_sheet_id, google_sa_email, google_sa_private_key)
+ *   3. Environment variables: GOOGLE_SHEET_ID, GOOGLE_SA_EMAIL, GOOGLE_SA_PRIVATE_KEY
  */
+
+import { createServerClient } from '@/lib/supabase';
 
 const SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+// ── Credential cache (avoid repeated DB lookups within the same request) ──────
+let cachedCreds: { sheetId: string; email: string; key: string } | null = null;
+
+export interface SheetCredentials {
+  sheetId: string;
+  email: string;
+  privateKey: string;
+}
+
+/**
+ * Set credentials explicitly (e.g. from test-sheet API body).
+ * These take priority over DB and env vars.
+ */
+export function setOverrideCredentials(creds: SheetCredentials | null) {
+  if (creds) {
+    cachedCreds = { sheetId: creds.sheetId, email: creds.email, key: creds.privateKey };
+  } else {
+    cachedCreds = null;
+  }
+}
+
+export async function getCredentials(): Promise<{ sheetId: string; email: string; key: string }> {
+  // 1. Override (from explicit setOverrideCredentials call)
+  if (cachedCreds) return cachedCreds;
+
+  // 2. Try env vars first (fastest)
+  const envSheetId = process.env.GOOGLE_SHEET_ID;
+  const envEmail = process.env.GOOGLE_SA_EMAIL;
+  const envKey = process.env.GOOGLE_SA_PRIVATE_KEY;
+  if (envSheetId && envEmail && envKey
+      && !envSheetId.includes('your_') && !envEmail.includes('your-')) {
+    cachedCreds = { sheetId: envSheetId, email: envEmail, key: envKey };
+    return cachedCreds;
+  }
+
+  // 3. Fallback to database settings
+  try {
+    const db = createServerClient();
+    const { data } = await db
+      .from('settings')
+      .select('google_sheet_id, google_sa_email, google_sa_private_key')
+      .limit(1)
+      .single();
+    if (data?.google_sheet_id && data?.google_sa_email && data?.google_sa_private_key) {
+      cachedCreds = {
+        sheetId: data.google_sheet_id,
+        email: data.google_sa_email,
+        key: data.google_sa_private_key,
+      };
+      return cachedCreds;
+    }
+  } catch { /* ignore DB errors */ }
+
+  throw new Error(
+    'Google Sheets chưa được cấu hình. Vào Cài đặt → nhập Sheet ID, Service Account Email, và Private Key rồi bấm Lưu.'
+  );
+}
 
 // ── JWT helpers ──────────────────────────────────────────────────────────────
 
@@ -49,18 +109,17 @@ async function signJWT(payload: Record<string, unknown>, privateKeyPem: string):
 }
 
 async function getAccessToken(): Promise<string> {
-  const email = process.env.GOOGLE_SA_EMAIL;
+  const creds = await getCredentials();
   // Normalize private key: handle \\n (Vercel), \r\n (Windows), and literal newlines
-  const rawKey = process.env.GOOGLE_SA_PRIVATE_KEY ?? '';
-  const key = rawKey
+  const key = creds.key
     .replace(/\\n/g, '\n')   // escaped newlines from env vars
     .replace(/\r\n/g, '\n')  // Windows CRLF
     .trim();
-  if (!email || !key) throw new Error('GOOGLE_SA_EMAIL or GOOGLE_SA_PRIVATE_KEY env var missing');
+  if (!creds.email || !key) throw new Error('GOOGLE_SA_EMAIL or GOOGLE_SA_PRIVATE_KEY missing');
 
   const now = Math.floor(Date.now() / 1000);
   const jwt = await signJWT(
-    { iss: email, scope: SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 },
+    { iss: creds.email, scope: SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 },
     key
   );
 
@@ -79,11 +138,10 @@ async function getAccessToken(): Promise<string> {
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 export async function sheetsGet(range: string): Promise<string[][]> {
-  const sheetId = process.env.GOOGLE_SHEET_ID;
-  if (!sheetId) throw new Error('GOOGLE_SHEET_ID env var missing');
+  const creds = await getCredentials();
   const token = await getAccessToken();
   const res = await fetch(
-    `${SHEETS_BASE}/${sheetId}/values/${encodeURIComponent(range)}`,
+    `${SHEETS_BASE}/${creds.sheetId}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   const json = await res.json();
@@ -92,11 +150,10 @@ export async function sheetsGet(range: string): Promise<string[][]> {
 }
 
 export async function sheetsAppend(range: string, values: string[][]): Promise<void> {
-  const sheetId = process.env.GOOGLE_SHEET_ID;
-  if (!sheetId) throw new Error('GOOGLE_SHEET_ID env var missing');
+  const creds = await getCredentials();
   const token = await getAccessToken();
   const res = await fetch(
-    `${SHEETS_BASE}/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `${SHEETS_BASE}/${creds.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -110,11 +167,10 @@ export async function sheetsAppend(range: string, values: string[][]): Promise<v
 }
 
 export async function sheetsUpdate(range: string, values: string[][]): Promise<void> {
-  const sheetId = process.env.GOOGLE_SHEET_ID;
-  if (!sheetId) throw new Error('GOOGLE_SHEET_ID env var missing');
+  const creds = await getCredentials();
   const token = await getAccessToken();
   const res = await fetch(
-    `${SHEETS_BASE}/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+    `${SHEETS_BASE}/${creds.sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
