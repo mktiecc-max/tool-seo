@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setOverrideCredentials, sheetsGet } from '@/lib/google-sheets';
+import { setOverrideCredentials, getFirstSheetName, resetSheetNameCache } from '@/lib/google-sheets';
 import { createServerClient } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
@@ -46,16 +46,16 @@ export async function POST(req: NextRequest) {
       // else: will fall through to env vars in google-sheets.ts
     }
 
-    // Try reading sheet to verify connection
-    const rows = await sheetsGet('Sheet1!A1:A2');
-    const rowCount = rows?.length ?? 0;
+    // Reset cache and try getting sheet metadata to verify connection
+    resetSheetNameCache();
+    const sheetName = await getFirstSheetName();
 
     // Clear override after test
     setOverrideCredentials(null);
 
     return NextResponse.json({
       ok: true,
-      message: `Kết nối thành công! Sheet có ${rowCount} hàng đầu tiên.`,
+      message: `Kết nối thành công! Sheet: "${sheetName}"`,
     });
   } catch (err: unknown) {
     // Clear override on error too

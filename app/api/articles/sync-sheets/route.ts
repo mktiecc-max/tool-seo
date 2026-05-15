@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { sheetsGet, sheetsAppend, sheetsUpdate, getCredentials } from '@/lib/google-sheets';
+import { sheetsGet, sheetsAppend, sheetsUpdate, getCredentials, getFirstSheetName, resetSheetNameCache } from '@/lib/google-sheets';
 import { Article } from '@/types';
 
 // Force Node.js runtime so crypto.subtle (used for JWT signing) is available
@@ -20,7 +20,7 @@ export const runtime = 'nodejs';
  * I = Trạng thái
  * J = Ngày cập nhật
  */
-const SHEET_RANGE = 'Sheet1!A:J';
+// SHEET_RANGE is built dynamically using getFirstSheetName()
 const HEADER_ROW = [
   'ID', 'Từ khóa', 'Tiêu đề', 'Outline',
   'Nội dung chi tiết', 'Link ảnh', 'Category',
@@ -102,8 +102,12 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
 export async function POST(req: NextRequest) {
   // Always return JSON — never let an unhandled exception produce an HTML response
   try {
-    // Credential resolution is now handled by lib/google-sheets.ts
-    // (reads from DB settings first, then env vars)
+    // Reset cached sheet name for each request
+    resetSheetNameCache();
+
+    // Auto-detect tên sheet đầu tiên (Sheet1, Trang tính1, v.v.)
+    const sheetName = await getFirstSheetName();
+    const SHEET_RANGE = `${sheetName}!A:J`;
     const body = await req.json();
     const article_ids: string[] = body.article_ids ?? [];
     const sync_all: boolean = body.sync_all ?? false;
@@ -163,7 +167,7 @@ export async function POST(req: NextRequest) {
       existingRows = [HEADER_ROW];
     } else if (existingRows[0]?.[0] !== 'ID') {
       // Header cũ (từ phiên bản cũ) — ghi đè header mới
-      await sheetsUpdate('Sheet1!A1:J1', [HEADER_ROW]);
+      await sheetsUpdate(`${sheetName}!A1:J1`, [HEADER_ROW]);
       existingRows[0] = HEADER_ROW;
     }
 
@@ -185,7 +189,7 @@ export async function POST(req: NextRequest) {
 
       if (matchRowIndex >= 0) {
         const sheetRow = matchRowIndex + 1; // 1-indexed
-        await sheetsUpdate(`Sheet1!A${sheetRow}:J${sheetRow}`, [newRow]);
+        await sheetsUpdate(`${sheetName}!A${sheetRow}:J${sheetRow}`, [newRow]);
         existingRows[matchRowIndex] = newRow;
         updated++;
       } else {

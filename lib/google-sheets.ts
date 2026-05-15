@@ -137,6 +137,39 @@ async function getAccessToken(): Promise<string> {
 
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
+// Cache sheet name per request to avoid repeated metadata lookups
+let cachedSheetName: string | null = null;
+
+/**
+ * Lấy tên sheet đầu tiên trong spreadsheet (tự detect, không hardcode "Sheet1").
+ * VD: "Sheet1", "Trang tính1", "Data", v.v.
+ */
+export async function getFirstSheetName(): Promise<string> {
+  if (cachedSheetName) return cachedSheetName;
+
+  const creds = await getCredentials();
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${SHEETS_BASE}/${creds.sheetId}?fields=sheets.properties.title`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || 'Cannot get spreadsheet metadata');
+
+  const sheets = json.sheets as { properties: { title: string } }[];
+  if (!sheets || sheets.length === 0) throw new Error('Spreadsheet không có sheet nào');
+
+  cachedSheetName = sheets[0].properties.title;
+  return cachedSheetName;
+}
+
+/**
+ * Reset cached sheet name (gọi đầu mỗi request nếu cần)
+ */
+export function resetSheetNameCache() {
+  cachedSheetName = null;
+}
+
 export async function sheetsGet(range: string): Promise<string[][]> {
   const creds = await getCredentials();
   const token = await getAccessToken();
