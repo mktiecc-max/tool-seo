@@ -77,8 +77,8 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
   });
   const title = a.meta_title || a.outline?.h1 || a.keyword || '';
   const { editLink, frontLink } = buildWpLinks(a, wpUrl);
-  // Ưu tiên hiện editLink (link quản trị WP), nếu không có thì fallback frontLink
-  const displayLink = editLink || frontLink;
+  // Theo yêu cầu: ưu tiên lấy permalink (frontLink) hoặc slug, nếu không có mới fallback về editLink
+  const displayLink = frontLink || editLink;
 
   // Resolve category name from WP category ID (nếu có)
   let categoryName = '';
@@ -211,7 +211,7 @@ export async function POST(req: NextRequest) {
 
         if (matchRowIndex >= 0) {
           const sheetRow = matchRowIndex + 1; // 1-indexed
-          await sheetsUpdate(`${sheetName}!A${sheetRow}:K${sheetRow}`, [newRow]);
+          await sheetsUpdate(`'${sheetName}'!A${sheetRow}:K${sheetRow}`, [newRow]);
           existingRows[matchRowIndex] = newRow;
           updated++;
         } else {
