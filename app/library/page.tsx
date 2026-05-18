@@ -210,6 +210,16 @@ export default function LibraryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ article_ids: ids }),
       });
+
+      // Guard: check Content-Type before parsing as JSON
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error(
+          `Lỗi server (HTTP ${res.status}): phản hồi không phải JSON. ` +
+          'Có thể do timeout hoặc lỗi hệ thống. Hãy kiểm tra cấu hình Google Sheets trong Cài đặt.'
+        );
+      }
+
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Sync thất bại');
       setSyncResult({ inserted: json.inserted, updated: json.updated, sheetUrl: json.sheetUrl });

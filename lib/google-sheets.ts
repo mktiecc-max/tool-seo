@@ -34,6 +34,13 @@ export function setOverrideCredentials(creds: SheetCredentials | null) {
   }
 }
 
+/**
+ * Reset credential cache (gọi đầu mỗi request để tránh dùng lại creds cũ)
+ */
+export function resetCredentialsCache() {
+  cachedCreds = null;
+}
+
 export async function getCredentials(): Promise<{ sheetId: string; email: string; key: string }> {
   // 1. Override (from explicit setOverrideCredentials call)
   if (cachedCreds) return cachedCreds;

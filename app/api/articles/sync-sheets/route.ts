@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { sheetsGet, sheetsAppend, sheetsUpdate, getCredentials, getFirstSheetName, resetSheetNameCache } from '@/lib/google-sheets';
+import { sheetsGet, sheetsAppend, sheetsUpdate, getCredentials, getFirstSheetName, resetSheetNameCache, resetCredentialsCache } from '@/lib/google-sheets';
 import { Article } from '@/types';
 
 // Force Node.js runtime so crypto.subtle (used for JWT signing) is available
 export const runtime = 'nodejs';
+// Increase timeout for Vercel (syncing many articles can take time)
+export const maxDuration = 60;
 
 /**
  * Sheet structure — 1 bài = 1 hàng, định danh bằng ID (cột A):
@@ -102,29 +104,31 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
 export async function POST(req: NextRequest) {
   // Always return JSON — never let an unhandled exception produce an HTML response
   try {
-    // Reset cached sheet name for each request
-    resetSheetNameCache();
+    // ── 1. Parse request body FIRST (before any external API calls) ──────
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Body không hợp lệ (expected JSON)' }, { status: 400 });
+    }
+    const article_ids: string[] = (body.article_ids as string[]) ?? [];
+    const sync_all: boolean = (body.sync_all as boolean) ?? false;
 
-    // Auto-detect tên sheet đầu tiên (Sheet1, Trang tính1, v.v.)
-    const sheetName = await getFirstSheetName();
-    const SHEET_RANGE = `${sheetName}!A:J`;
-    const body = await req.json();
-    const article_ids: string[] = body.article_ids ?? [];
-    const sync_all: boolean = body.sync_all ?? false;
+    if (!sync_all && !article_ids.length) {
+      return NextResponse.json({ error: 'Cần ít nhất 1 article_id hoặc sync_all=true' }, { status: 400 });
+    }
 
+    // ── 2. Fetch articles from database ──────────────────────────────────
     const db = createServerClient();
 
     let articles: Article[] = [];
     if (sync_all) {
       const { data, error } = await db.from('articles').select('*');
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(`DB error: ${error.message}`);
       articles = (data ?? []) as Article[];
     } else {
-      if (!article_ids.length) {
-        return NextResponse.json({ error: 'Cần ít nhất 1 article_id hoặc sync_all=true' }, { status: 400 });
-      }
       const { data, error } = await db.from('articles').select('*').in('id', article_ids);
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(`DB error: ${error.message}`);
       articles = (data ?? []) as Article[];
     }
 
@@ -132,7 +136,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, inserted: 0, updated: 0, total: 0, message: 'Không có bài nào để đồng bộ' });
     }
 
-    // Đọc WP URL từ settings
+    // ── 3. Reset caches & connect to Google Sheets ──────────────────────
+    resetSheetNameCache();
+    resetCredentialsCache();
+
+    // Auto-detect tên sheet đầu tiên (Sheet1, Trang tính1, v.v.)
+    const sheetName = await getFirstSheetName();
+    const SHEET_RANGE = `${sheetName}!A:J`;
+
+    // ── 4. Read WP URL from settings ────────────────────────────────────
     const { data: settingsData } = await db
       .from('settings')
       .select('wp_url')
@@ -140,7 +152,7 @@ export async function POST(req: NextRequest) {
       .single();
     const wpUrl = settingsData?.wp_url || process.env.WP_URL || process.env.NEXT_PUBLIC_WP_URL || '';
 
-    // Đọc WP categories nếu có (cache map id → name)
+    // ── 5. Fetch WP categories (optional, non-blocking) ─────────────────
     let wpCategories: Record<number, string> = {};
     try {
       const baseUrl = wpUrl.replace(/\/$/, '');
@@ -155,7 +167,7 @@ export async function POST(req: NextRequest) {
       }
     } catch { /* bỏ qua — không có category thì cột trống */ }
 
-    // Fetch existing sheet rows
+    // ── 6. Fetch existing sheet rows ────────────────────────────────────
     let existingRows: string[][] = [];
     try {
       existingRows = await sheetsGet(SHEET_RANGE);
@@ -171,40 +183,50 @@ export async function POST(req: NextRequest) {
       existingRows[0] = HEADER_ROW;
     }
 
+    // ── 7. Sync each article ────────────────────────────────────────────
     let inserted = 0;
     let updated = 0;
+    const errors: string[] = [];
 
     for (const article of articles) {
-      const newRow = articleToRow(article, wpUrl, wpCategories);
+      try {
+        const newRow = articleToRow(article, wpUrl, wpCategories);
 
-      // Match by ID (cột A, index 0) — unique, không bị trùng keyword
-      let matchRowIndex = -1;
-      for (let i = 1; i < existingRows.length; i++) {
-        const rowId = (existingRows[i]?.[0] ?? '').trim();
-        if (rowId && rowId === article.id) {
-          matchRowIndex = i;
-          break;
+        // Match by ID (cột A, index 0) — unique, không bị trùng keyword
+        let matchRowIndex = -1;
+        for (let i = 1; i < existingRows.length; i++) {
+          const rowId = (existingRows[i]?.[0] ?? '').trim();
+          if (rowId && rowId === article.id) {
+            matchRowIndex = i;
+            break;
+          }
         }
-      }
 
-      if (matchRowIndex >= 0) {
-        const sheetRow = matchRowIndex + 1; // 1-indexed
-        await sheetsUpdate(`${sheetName}!A${sheetRow}:J${sheetRow}`, [newRow]);
-        existingRows[matchRowIndex] = newRow;
-        updated++;
-      } else {
-        await sheetsAppend(SHEET_RANGE, [newRow]);
-        existingRows.push(newRow);
-        inserted++;
+        if (matchRowIndex >= 0) {
+          const sheetRow = matchRowIndex + 1; // 1-indexed
+          await sheetsUpdate(`${sheetName}!A${sheetRow}:J${sheetRow}`, [newRow]);
+          existingRows[matchRowIndex] = newRow;
+          updated++;
+        } else {
+          await sheetsAppend(SHEET_RANGE, [newRow]);
+          existingRows.push(newRow);
+          inserted++;
+        }
+      } catch (articleErr: unknown) {
+        const msg = articleErr instanceof Error ? articleErr.message : String(articleErr);
+        errors.push(`[${article.keyword}]: ${msg}`);
+        console.error(`[sync-sheets] Error syncing article "${article.keyword}":`, msg);
       }
     }
 
+    const creds = await getCredentials();
     return NextResponse.json({
       ok: true,
       inserted,
       updated,
       total: articles.length,
-      sheetUrl: `https://docs.google.com/spreadsheets/d/${(await getCredentials()).sheetId}`,
+      errors: errors.length > 0 ? errors : undefined,
+      sheetUrl: `https://docs.google.com/spreadsheets/d/${creds.sheetId}`,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

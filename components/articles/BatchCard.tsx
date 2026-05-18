@@ -130,6 +130,16 @@ export default function BatchCard({ article: initialArticle, selected = false, o
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ article_ids: [article.id] }),
       });
+
+      // Guard: check Content-Type before parsing as JSON
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error(
+          `Lỗi server (HTTP ${res.status}): phản hồi không phải JSON. ` +
+          'Hãy kiểm tra cấu hình Google Sheets trong Cài đặt.'
+        );
+      }
+
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Đồng bộ thất bại');
       setSyncResult({ ok: true, sheetUrl: json.sheetUrl, message: `Đã đồng bộ (${json.updated > 0 ? 'cập nhật' : 'thêm mới'})` });
