@@ -45,17 +45,7 @@ export async function getCredentials(): Promise<{ sheetId: string; email: string
   // 1. Override (from explicit setOverrideCredentials call)
   if (cachedCreds) return cachedCreds;
 
-  // 2. Try env vars first (fastest)
-  const envSheetId = process.env.GOOGLE_SHEET_ID;
-  const envEmail = process.env.GOOGLE_SA_EMAIL;
-  const envKey = process.env.GOOGLE_SA_PRIVATE_KEY;
-  if (envSheetId && envEmail && envKey
-      && !envSheetId.includes('your_') && !envEmail.includes('your-')) {
-    cachedCreds = { sheetId: envSheetId, email: envEmail, key: envKey };
-    return cachedCreds;
-  }
-
-  // 3. Fallback to database settings
+  // 2. Prefer database settings over environment variables
   try {
     const db = createServerClient();
     const { data } = await db
@@ -71,7 +61,17 @@ export async function getCredentials(): Promise<{ sheetId: string; email: string
       };
       return cachedCreds;
     }
-  } catch { /* ignore DB errors */ }
+  } catch { /* ignore DB errors and fallback */ }
+
+  // 3. Fallback to environment variables
+  const envSheetId = process.env.GOOGLE_SHEET_ID;
+  const envEmail = process.env.GOOGLE_SA_EMAIL;
+  const envKey = process.env.GOOGLE_SA_PRIVATE_KEY;
+  if (envSheetId && envEmail && envKey
+      && !envSheetId.includes('your_') && !envEmail.includes('your-')) {
+    cachedCreds = { sheetId: envSheetId, email: envEmail, key: envKey };
+    return cachedCreds;
+  }
 
   throw new Error(
     'Google Sheets chưa được cấu hình. Vào Cài đặt → nhập Sheet ID, Service Account Email, và Private Key rồi bấm Lưu.'
