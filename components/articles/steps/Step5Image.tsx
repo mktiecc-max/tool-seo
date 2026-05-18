@@ -5,7 +5,7 @@ import { useDropzone } from 'react-dropzone';
 import { Article } from '@/types';
 import {
   Loader2, RefreshCw, Upload, CheckCircle2, AlertCircle,
-  Image as ImageIcon, Wand2, X, ArrowRight, SkipForward,
+  Image as ImageIcon, Wand2, X, ArrowRight, SkipForward, LayoutTemplate,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ImagePromptJSON } from '@/lib/prompts';
@@ -20,11 +20,12 @@ import {
   type ImageModelInfo,
 } from '@/lib/constants';
 
+import BannerGenerator from './BannerGenerator';
+
 const EMPTY_PROMPT_JSON: ImagePromptJSON = {
-  mo_ta_canh: '',
-  phong_cach: 'Ảnh thực tế chuyên nghiệp (photorealistic), ánh sáng tự nhiên',
-  mau_sac: 'Tông màu tự nhiên, tươi sáng',
-  bo_sung: 'Không có chữ trong ảnh, chất lượng cao, góc chụp ngang',
+  background: '',
+  logo: 'Logo đặt góc trên bên trái hoặc chính giữa phía trên, kích thước vừa phải, nền trong suốt',
+  title_text: '',
 };
 
 
@@ -52,7 +53,7 @@ export default function Step5Image({ article, onConfirmed }: Props) {
   const [promptJSON, setPromptJSON] = useState<ImagePromptJSON>(() => {
     try { return JSON.parse(article.image_prompt || ''); } catch { return { ...EMPTY_PROMPT_JSON }; }
   });
-  const isJSONPrompt = (s: string) => { try { const p = JSON.parse(s); return !!p.mo_ta_canh; } catch { return false; } };
+  const isJSONPrompt = (s: string) => { try { const p = JSON.parse(s); return !!p.background || !!p.mo_ta_canh; } catch { return false; } };
 
   const updatePromptField = (field: keyof ImagePromptJSON, value: string) => {
     const next = { ...promptJSON, [field]: value };
@@ -69,6 +70,7 @@ export default function Step5Image({ article, onConfirmed }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<'ai' | 'banner'>('ai');
   const promptGenerated = useRef(false);
 
   // Fetch dynamic model list — d\u00f9ng fetchImageModels() t\u1eeb lib/constants (d\u00f9ng chung v\u1edbi BatchCard)
@@ -251,10 +253,47 @@ export default function Step5Image({ article, onConfirmed }: Props) {
         <p className="text-gray-400 text-sm">AI tự động sinh image prompt từ nội dung bài</p>
       </div>
 
-      {/* Image Prompt */}
-      <div>
+      {/* Tab: AI Prompt vs Banner SEO */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setActiveTab('ai')}
+          className={cn(
+            'flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border-2 text-sm font-medium transition-all',
+            activeTab === 'ai'
+              ? 'border-violet-500 bg-violet-500/10 text-violet-300'
+              : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
+          )}
+        >
+          <Wand2 size={14} /> Tạo ảnh AI
+        </button>
+        <button
+          onClick={() => setActiveTab('banner')}
+          className={cn(
+            'flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border-2 text-sm font-medium transition-all',
+            activeTab === 'banner'
+              ? 'border-blue-500 bg-blue-500/10 text-blue-300'
+              : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
+          )}
+        >
+          <LayoutTemplate size={14} /> Banner SEO
+        </button>
+      </div>
+
+      {/* Tab: Banner SEO */}
+      {activeTab === 'banner' && (
+        <BannerGenerator
+          article={article}
+          onImageGenerated={(url) => setImageUrl(url)}
+        />
+      )}
+
+      {/* Tab: AI Prompt */}
+      {activeTab === 'ai' && (
+        <div className="space-y-6">
+        {/* Image Prompt */}
+        <div>
         <div className="flex items-center justify-between mb-3">
-          <label className="text-sm font-medium text-gray-300">✨ Mô tả ảnh (tiếng Việt)</label>
+          <label className="text-sm font-medium text-gray-300">✨ Mô tả ảnh (3 phần)</label>
           <button
             onClick={generatePrompt}
             disabled={generatingPrompt}
@@ -271,47 +310,40 @@ export default function Step5Image({ article, onConfirmed }: Props) {
             <span className="text-sm text-gray-400">AI đang tạo mô tả ảnh...</span>
           </div>
         ) : isJSONPrompt(imagePrompt) ? (
-          /* JSON Form Editor */
+          /* JSON Form Editor — 3 phần */
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3">
+              {/* Part 1: Background */}
               <div>
-                <label className="block text-xs text-gray-500 mb-1">🏙️ Mô tả cảnh vật / đối tượng <span className="text-red-400">*</span></label>
+                <label className="block text-xs text-gray-500 mb-1">🖼️ Phần 1 — Ảnh nền (background) <span className="text-red-400">*</span></label>
                 <textarea
-                  value={promptJSON.mo_ta_canh}
-                  onChange={(e) => updatePromptField('mo_ta_canh', e.target.value)}
-                  placeholder="VD: Một người đang làm việc trên laptop tại bàn làm việc hiện đại..."
+                  value={(promptJSON as unknown as Record<string,string>).background ?? ''}
+                  onChange={(e) => updatePromptField('background' as keyof ImagePromptJSON, e.target.value)}
+                  placeholder="VD: Không gian học tập hiện đại, ánh sáng tự nhiên từ cửa sổ, trẻ em đang học bài tại bàn..."
                   rows={3}
                   className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 resize-none"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">🎨 Phong cách ảnh</label>
-                  <input
-                    value={promptJSON.phong_cach}
-                    onChange={(e) => updatePromptField('phong_cach', e.target.value)}
-                    placeholder="Ảnh thực tế chuyên nghiệp, ánh sáng tự nhiên"
-                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">🎨 Màu sắc chủ đạo</label>
-                  <input
-                    value={promptJSON.mau_sac}
-                    onChange={(e) => updatePromptField('mau_sac', e.target.value)}
-                    placeholder="Tông xanh lá và trắng, tươi sáng"
-                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
+              {/* Part 2: Logo */}
               <div>
-                <label className="block text-xs text-gray-500 mb-1">➕ Yêu cầu bổ sung</label>
+                <label className="block text-xs text-gray-500 mb-1">🏷️ Phần 2 — Logo thương hiệu</label>
                 <input
-                  value={promptJSON.bo_sung}
-                  onChange={(e) => updatePromptField('bo_sung', e.target.value)}
-                  placeholder="Không có chữ trong ảnh, góc chụp ngang, chất lượng cao"
+                  value={(promptJSON as unknown as Record<string,string>).logo ?? ''}
+                  onChange={(e) => updatePromptField('logo' as keyof ImagePromptJSON, e.target.value)}
+                  placeholder="VD: Logo đặt góc trên bên trái, kích thước vừa phải, nền trong suốt"
                   className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
                 />
+              </div>
+              {/* Part 3: Title text */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">✍️ Phần 3 — Tiêu đề hiển thị trong ảnh</label>
+                <input
+                  value={(promptJSON as unknown as Record<string,string>).title_text ?? ''}
+                  onChange={(e) => updatePromptField('title_text' as keyof ImagePromptJSON, e.target.value)}
+                  placeholder="VD: Vì sao trẻ mất tập trung khi học? Nguyên nhân và giải pháp"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-[10px] text-gray-600 mt-1">Mặc định lấy meta title của bài. AI sẽ render text này trực tiếp trong ảnh.</p>
               </div>
             </div>
             {/* Raw JSON preview collapsible */}
@@ -529,9 +561,11 @@ export default function Step5Image({ article, onConfirmed }: Props) {
           </p>
           <p className="text-xs text-gray-600 mt-1">PNG, JPG, WEBP · tối đa 5MB</p>
         </div>
+        </div>
       </div>
+      )}
 
-      {/* Loading state */}
+      {/* Loading state — chia sẻ cả 2 tab */}
       {generatingImage && !imageUrl && (
         <div className="bg-gray-900 rounded-xl p-8 flex flex-col items-center justify-center border border-gray-700">
           <Loader2 size={32} className="animate-spin text-violet-400 mb-3" />

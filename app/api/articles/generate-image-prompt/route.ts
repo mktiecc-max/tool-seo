@@ -30,7 +30,9 @@ export async function POST(req: NextRequest) {
       if (brandKit) brandImageContext = buildBrandImageContext(brandKit);
     }
 
-    const prompt = buildImagePromptPrompt(article.keyword, contentSummary) + brandImageContext;
+    // Lấy tiêu đề bài viết để dùng làm text trong ảnh
+    const articleTitle = article.meta_title || article.keyword;
+    const prompt = buildImagePromptPrompt(article.keyword, contentSummary, articleTitle) + brandImageContext;
     const rawText = await callAI(article.ai_model, prompt, settings);
 
     // Parse JSON từ AI response
@@ -42,12 +44,11 @@ export async function POST(req: NextRequest) {
         .trim();
       imagePromptJSON = JSON.parse(cleaned);
     } catch {
-      // Nếu AI không trả về JSON hợp lệ, tạo cấu trúc mặc định từ raw text
+      // Nếu AI không trả về JSON hợp lệ, tạo cấu trúc 3-phần mặc định
       imagePromptJSON = {
-        mo_ta_canh: rawText.trim(),
-        phong_cach: 'Ảnh thực tế chuyên nghiệp (photorealistic), ánh sáng tự nhiên',
-        mau_sac: 'Tông màu tự nhiên, tươi sáng',
-        bo_sung: 'Không có chữ trong ảnh, chất lượng cao',
+        background: rawText.trim() || `Không gian học tập hiện đại, ánh sáng tự nhiên, liên quan đến chủ đề ${article.keyword}`,
+        logo: 'Logo đặt góc trên bên trái hoặc chính giữa phía trên, kích thước vừa phải, nền trong suốt',
+        title_text: articleTitle,
       };
     }
 

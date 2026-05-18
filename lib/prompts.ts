@@ -30,35 +30,60 @@ export function buildContentPrompt(params: {
   return `Bạn là chuyên gia SEO viết nội dung tiếng Việt. Viết bài hoàn chỉnh theo outline sau.\n\nTừ khóa chính: ${params.keyword}\nPhong cách: ${toneMap[params.tone] || params.tone}\nĐộ dài mục tiêu: ${params.target_length} ký tự\nOutline: ${params.outline}\n\nYêu cầu:\n- Viết đầy đủ từng section theo outline\n- Từ khóa chính xuất hiện tự nhiên 1-2% mật độ\n- Mỗi H2 có ít nhất 2-3 đoạn văn\n- Không dùng từ sáo rỗng như "trong bài viết này", "như chúng ta đã biết"\n- Trả về HTML thuần: chỉ dùng thẻ h1, h2, h3, p, ul, ol, li, strong, em\n- Không có DOCTYPE, html, body, head, style, script`;
 }
 
+/**
+ * Cấu trúc prompt ảnh chuẩn — 3 phần chính:
+ * 1. background: ảnh nền phù hợp chủ đề nội dung
+ * 2. logo: vị trí và cách đặt logo thương hiệu
+ * 3. title_text: tiêu đề bài viết hiển thị trực tiếp trong ảnh
+ */
 export interface ImagePromptJSON {
-  mo_ta_canh: string;   // Mô tả cảnh vật/đối tượng trong ảnh (tiếng Việt)
-  phong_cach: string;   // Phong cách ảnh (thực tế, minh họa, v.v.)
-  mau_sac: string;      // Tông màu chủ đạo
-  bo_sung: string;      // Yêu cầu bổ sung (góc chụp, không có chữ, v.v.)
+  background: string;   // Mô tả ảnh nền phù hợp chủ đề (tiếng Việt)
+  logo: string;         // Hướng dẫn vị trí logo thương hiệu
+  title_text: string;   // Tiêu đề bài viết hiển thị trong ảnh
 }
 
-export function buildImagePromptPrompt(keyword: string, contentSummary: string): string {
+export function buildImagePromptPrompt(keyword: string, contentSummary: string, articleTitle?: string): string {
+  const titleNote = articleTitle
+    ? `Tiêu đề bài viết (dùng làm text trong ảnh): "${articleTitle}"`
+    : `Từ khóa chính: "${keyword}"`;
+
   return `Dựa trên bài viết về "${keyword}" với nội dung tóm tắt:
 ${contentSummary}
 
-Hãy tạo mô tả ảnh featured image cho bài viết này. Trả về JSON thuần (KHÔNG có markdown, KHÔNG có \`\`\`json, chỉ JSON):
+${titleNote}
+
+Hãy tạo mô tả ảnh featured image theo đúng 3 phần sau. Trả về JSON thuần (KHÔNG có markdown, KHÔNG có \`\`\`json, chỉ JSON thuần):
 {
-  "mo_ta_canh": "Mô tả chi tiết cảnh vật/đối tượng trong ảnh bằng tiếng Việt, liên quan trực tiếp đến chủ đề ${keyword}. Ví dụ: Một người đang làm việc trên laptop tại bàn làm việc hiện đại",
-  "phong_cach": "Phong cách ảnh. Ví dụ: Ảnh thực tế chuyên nghiệp (photorealistic), ánh sáng tự nhiên ban ngày",
-  "mau_sac": "Tông màu chủ đạo. Ví dụ: Tông xanh lá và trắng, tươi sáng, hiện đại",
-  "bo_sung": "Yêu cầu thêm. Ví dụ: Không có chữ trong ảnh, góc chụp ngang, độ sâu trường ảnh얕"
+  "background": "Mô tả chi tiết ảnh nền phù hợp với chủ đề '${keyword}'. Ảnh thực tế chuyên nghiệp (photorealistic), ánh sáng tự nhiên, chất lượng cao. Ví dụ: Không gian văn phòng hiện đại với bàn làm việc gọn gàng, ánh sáng tự nhiên từ cửa sổ, tông màu trắng và xanh nhạt",
+  "logo": "Vị trí đặt logo thương hiệu trong ảnh. Ví dụ: Logo đặt góc trên bên trái, kích thước vừa phải, nền trong suốt, không che khuất nội dung chính",
+  "title_text": "${articleTitle || keyword}"
 }`;
 }
 
 /**
- * Chuyển ImagePromptJSON sang prompt tiếng Anh để gửi cho model ảnh
+ * Chuyển ImagePromptJSON (3 phần) sang English prompt gửi cho model ảnh
  */
 export function imagePromptJSONToEnglish(json: ImagePromptJSON): string {
-  return [
-    json.mo_ta_canh,
-    json.phong_cach,
-    `Color palette: ${json.mau_sac}`,
-    json.bo_sung,
-    'No text or watermark in the image.',
-  ].filter(Boolean).join('. ');
+  const parts: string[] = [];
+
+  // Part 1: Background
+  parts.push(`BACKGROUND: ${json.background}`);
+
+  // Part 2: Logo placement
+  if (json.logo) {
+    parts.push(`LOGO: ${json.logo}`);
+  }
+
+  // Part 3: Title text overlay
+  if (json.title_text) {
+    parts.push(
+      `TEXT OVERLAY: Render the following Vietnamese title text clearly and prominently in the image: "${json.title_text}". ` +
+      `Use large, bold, modern sans-serif font. Ensure all Vietnamese diacritical marks are correct. ` +
+      `Place text in a readable area with sufficient contrast (white text on dark overlay or dark text on light area).`
+    );
+  }
+
+  parts.push('High quality, professional marketing image, 4K resolution, wide banner format.');
+
+  return parts.join(' | ');
 }

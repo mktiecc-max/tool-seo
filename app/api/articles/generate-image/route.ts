@@ -42,7 +42,9 @@ export async function POST(req: NextRequest) {
     let finalPrompt = image_prompt;
     try {
       const parsed: ImagePromptJSON = JSON.parse(image_prompt);
-      if (parsed.mo_ta_canh) finalPrompt = imagePromptJSONToEnglish(parsed);
+      if (parsed.background || (parsed as unknown as Record<string,string>).mo_ta_canh) {
+        finalPrompt = imagePromptJSONToEnglish(parsed);
+      }
     } catch {
       // Không phải JSON → dùng trực tiếp
     }

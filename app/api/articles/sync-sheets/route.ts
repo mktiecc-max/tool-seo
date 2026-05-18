@@ -26,7 +26,7 @@ export const maxDuration = 60;
 const HEADER_ROW = [
   'ID', 'Từ khóa', 'Tiêu đề', 'Outline',
   'Nội dung chi tiết', 'Link ảnh', 'Category',
-  'Link bài viết', 'Trạng thái', 'Ngày cập nhật',
+  'Link bài viết', 'Trạng thái', 'Ngày cập nhật', 'Link Tool SEO',
 ];
 
 function buildOutlineText(a: Article): string {
@@ -70,7 +70,7 @@ function buildWpLinks(a: Article, wpUrl: string): { editLink: string; frontLink:
   return { editLink, frontLink };
 }
 
-function articleToRow(a: Article, wpUrl: string, categories: Record<number, string>): string[] {
+function articleToRow(a: Article, wpUrl: string, categories: Record<number, string>, toolUrl: string): string[] {
   const now = new Date().toLocaleDateString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -87,6 +87,8 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
     categoryName = categories[catId];
   }
 
+  const linkToolSeo = `${toolUrl}/articles/${a.id}`;
+
   return [
     a.id,
     a.keyword ?? '',
@@ -98,6 +100,7 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
     displayLink,
     a.status ?? '',
     now,
+    linkToolSeo,
   ];
 }
 
@@ -142,7 +145,10 @@ export async function POST(req: NextRequest) {
 
     // Auto-detect tên sheet đầu tiên (Sheet1, Trang tính1, v.v.)
     const sheetName = await getFirstSheetName();
-    const SHEET_RANGE = `${sheetName}!A:J`;
+    const SHEET_RANGE = `${sheetName}!A:K`;
+
+    // Extract toolUrl (origin) from the request URL
+    const toolUrl = new URL(req.url).origin;
 
     // ── 4. Read WP URL from settings ────────────────────────────────────
     const { data: settingsData } = await db
@@ -177,9 +183,10 @@ export async function POST(req: NextRequest) {
     if (existingRows.length === 0) {
       await sheetsAppend(SHEET_RANGE, [HEADER_ROW]);
       existingRows = [HEADER_ROW];
-    } else if (existingRows[0]?.[0] !== 'ID') {
+    } else if (existingRows[0]?.[0] !== 'ID' || existingRows[0].length < HEADER_ROW.length) {
       // Header cũ (từ phiên bản cũ) — ghi đè header mới
-      await sheetsUpdate(`${sheetName}!A1:J1`, [HEADER_ROW]);
+      await sheetsUpdate(`${sheetName}!A1:K1`, [HEADER_ROW]);
+      // Cập nhật lại row 0 trong existingRows bằng HEADER_ROW để tránh lỗi lúc so sánh
       existingRows[0] = HEADER_ROW;
     }
 
@@ -190,7 +197,7 @@ export async function POST(req: NextRequest) {
 
     for (const article of articles) {
       try {
-        const newRow = articleToRow(article, wpUrl, wpCategories);
+        const newRow = articleToRow(article, wpUrl, wpCategories, toolUrl);
 
         // Match by ID (cột A, index 0) — unique, không bị trùng keyword
         let matchRowIndex = -1;
@@ -204,7 +211,7 @@ export async function POST(req: NextRequest) {
 
         if (matchRowIndex >= 0) {
           const sheetRow = matchRowIndex + 1; // 1-indexed
-          await sheetsUpdate(`${sheetName}!A${sheetRow}:J${sheetRow}`, [newRow]);
+          await sheetsUpdate(`${sheetName}!A${sheetRow}:K${sheetRow}`, [newRow]);
           existingRows[matchRowIndex] = newRow;
           updated++;
         } else {
