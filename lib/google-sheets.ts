@@ -160,7 +160,13 @@ export async function getFirstSheetName(): Promise<string> {
     `${SHEETS_BASE}/${creds.sheetId}?fields=sheets.properties.title`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  const json = await res.json();
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Google Sheets API trả về phản hồi không hợp lệ (HTTP ${res.status}): ${text.slice(0, 100)}...`);
+  }
   if (!res.ok) throw new Error(json.error?.message || 'Cannot get spreadsheet metadata');
 
   const sheets = json.sheets as { properties: { title: string } }[];
@@ -184,7 +190,13 @@ export async function sheetsGet(range: string): Promise<string[][]> {
     `${SHEETS_BASE}/${creds.sheetId}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  const json = await res.json();
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Google Sheets GET trả về lỗi không hợp lệ (HTTP ${res.status}): ${text.slice(0, 100)}...`);
+  }
   if (!res.ok) throw new Error(json.error?.message || 'Sheets GET failed');
   return (json.values as string[][]) || [];
 }
@@ -201,7 +213,13 @@ export async function sheetsAppend(range: string, values: string[][]): Promise<v
     }
   );
   if (!res.ok) {
-    const json = await res.json();
+    const text = await res.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`Google Sheets APPEND trả về lỗi không hợp lệ (HTTP ${res.status}): ${text.slice(0, 100)}...`);
+    }
     throw new Error(json.error?.message || 'Sheets append failed');
   }
 }
@@ -218,7 +236,13 @@ export async function sheetsUpdate(range: string, values: string[][]): Promise<v
     }
   );
   if (!res.ok) {
-    const json = await res.json();
+    const text = await res.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`Google Sheets UPDATE trả về lỗi không hợp lệ (HTTP ${res.status}): ${text.slice(0, 100)}...`);
+    }
     throw new Error(json.error?.message || 'Sheets update failed');
   }
 }

@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
 
     // Auto-detect tên sheet đầu tiên (Sheet1, Trang tính1, v.v.)
     const sheetName = await getFirstSheetName();
-    const SHEET_RANGE = `${sheetName}!A:K`;
+    const SHEET_RANGE = `'${sheetName}'!A:K`;
 
     // Extract toolUrl (origin) from the request URL
     const toolUrl = new URL(req.url).origin;
