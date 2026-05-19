@@ -66,12 +66,34 @@ export async function POST(req: NextRequest) {
       meta_description: article.meta_description,
     });
 
-    // Update article as done — lưu URL thật từ WP vào field slug để frontend dùng
+    // Nếu WP trả về link dạng ?p=ID (bài draft chưa có slug), lấy permalink thực từ REST API
+    let finalUrl = wpPostUrl;
+    if (wpPostUrl.includes('?p=') || wpPostUrl.includes('/?p=')) {
+      try {
+        const base = settings.wp_url.replace(/\/$/, '');
+        const authHeader = 'Basic ' + Buffer.from(`${settings.wp_username}:${settings.wp_app_password}`).toString('base64');
+        const res = await fetch(
+          `${base}/wp-json/wp/v2/posts/${wpPostId}?_fields=id,link,slug`,
+          { headers: { Authorization: authHeader }, signal: AbortSignal.timeout(5000) }
+        );
+        if (res.ok) {
+          const data = await res.json() as { id: number; link: string; slug: string };
+          // Nếu link vẫn là ?p= nhưng slug đã có → tự build permalink
+          if (data.link && !data.link.includes('?p=')) {
+            finalUrl = data.link;
+          } else if (data.slug) {
+            finalUrl = `${base}/${data.slug}/`;
+          }
+        }
+      } catch { /* giữ link gốc nếu lỗi */ }
+    }
+
+    // Update article as done — lưu permalink thực vào slug (không lưu ?p= link)
     const { data: updatedArticle } = await db
       .from('articles')
       .update({
         wp_post_id: wpPostId,
-        slug: wpPostUrl,       // ghi đè slug bằng URL đầy đủ từ WordPress
+        slug: finalUrl,        // permalink thực (không phải ?p=ID draft link)
         status: 'done',
         error_message: null,
       })
@@ -84,7 +106,7 @@ export async function POST(req: NextRequest) {
       await db.from('keywords').update({ status: 'done' }).eq('id', article.keyword_id);
     }
 
-    return NextResponse.json({ article: updatedArticle, wp_post_url: wpPostUrl, wp_post_id: wpPostId });
+    return NextResponse.json({ article: updatedArticle, wp_post_url: finalUrl, wp_post_id: wpPostId });
   } catch (err: unknown) {
     const msg = (err as Error).message;
     const db = createServerClient();

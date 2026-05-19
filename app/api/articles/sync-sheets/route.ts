@@ -87,18 +87,24 @@ async function fetchWpPermalinks(
 }
 
 function buildFrontLink(a: Article, wpUrl: string, wpPermalinks: Record<number, string>): string {
-  // 1. slug lưu trong DB — nếu là full URL thì dùng luôn (publish route đã lưu full WP URL)
-  if (a.slug?.startsWith('http')) return a.slug;
-  // 2. Permalink thực tế từ WP REST API (có auth, lấy được cả draft)
+  const base = wpUrl.replace(/\/$/, '');
+
+  // 1. Ưu tiên permalink thực từ WP REST API (luôn là link đẹp, cả draft lẫn published)
   if (a.wp_post_id && wpPermalinks[a.wp_post_id]) {
     return wpPermalinks[a.wp_post_id];
   }
-  // 3. slug ngắn — ghép với wpUrl
-  if (a.slug) return `${wpUrl.replace(/\/$/, '')}/${a.slug.replace(/^\//, '')}`;
-  // 4. Fallback cuối cùng: ?p=ID
-  if (a.wp_post_id && wpUrl) return `${wpUrl.replace(/\/$/, '')}/?p=${a.wp_post_id}`;
+
+  // 2. slug trong DB — chỉ dùng nếu là URL đẹp (KHÔNG phải ?p= hay /?p=)
+  if (a.slug && !a.slug.includes('?p=') && !a.slug.includes('/?p=')) {
+    if (a.slug.startsWith('http')) return a.slug;
+    if (a.slug && base) return `${base}/${a.slug.replace(/^\//, '')}`;
+  }
+
+  // 3. Fallback cuối cùng: ?p=ID (chỉ khi không có cách nào khác)
+  if (a.wp_post_id && base) return `${base}/?p=${a.wp_post_id}`;
   return '';
 }
+
 
 function articleToRow(a: Article, wpUrl: string, categories: Record<number, string>, toolUrl: string, wpPermalinks: Record<number, string>): string[] {
   const now = new Date().toLocaleDateString('vi-VN', {
