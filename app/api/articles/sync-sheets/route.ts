@@ -262,12 +262,17 @@ export async function POST(req: NextRequest) {
     }
 
     const creds = await getCredentials();
+    console.log(`[sync-sheets] Done: inserted=${inserted}, updated=${updated}, errors=${errors.length}, total=${articles.length}`);
+    if (errors.length > 0) {
+      console.error('[sync-sheets] Per-article errors:', errors);
+    }
     return NextResponse.json({
       ok: true,
       inserted,
       updated,
       total: articles.length,
       errors: errors.length > 0 ? errors : undefined,
+      error_summary: errors.length > 0 ? `${errors.length} bài lỗi: ${errors[0]}` : undefined,
       sheetUrl: `https://docs.google.com/spreadsheets/d/${creds.sheetId}`,
     });
   } catch (err: unknown) {

@@ -67,7 +67,7 @@ export default function LibraryPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; label: string } | null>(null);
   const [deleteResult, setDeleteResult] = useState<{ count: number } | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ inserted: number; updated: number; sheetUrl?: string } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ inserted: number; updated: number; sheetUrl?: string; errorSummary?: string } | null>(null);
 
   const loadArticles = useCallback(async () => {
     const { data } = await supabase
@@ -222,7 +222,11 @@ export default function LibraryPage() {
 
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Sync thất bại');
-      setSyncResult({ inserted: json.inserted, updated: json.updated, sheetUrl: json.sheetUrl });
+      setSyncResult({ inserted: json.inserted, updated: json.updated, sheetUrl: json.sheetUrl, errorSummary: json.error_summary });
+      // Nếu có lỗi riêng từng bài thì alert chi tiết
+      if (json.error_summary) {
+        console.warn('[sync] Có lỗi khi sync:', json.errors);
+      }
     } catch (e) {
       alert((e as Error).message);
     } finally {
@@ -289,10 +293,15 @@ export default function LibraryPage() {
       {syncResult && (
         <div className="mb-4 bg-green-950/50 border border-green-800 rounded-xl px-4 py-3 flex items-center gap-3">
           <Sheet size={16} className="text-green-400" />
-          <p className="text-sm text-gray-300">
-            Sync xong: <span className="text-green-400 font-medium">{syncResult.inserted} bài mới</span>,{' '}
-            <span className="text-blue-400 font-medium">{syncResult.updated} bài cập nhật</span>
-          </p>
+          <div className="flex-1">
+            <p className="text-sm text-gray-300">
+              Sync xong: <span className="text-green-400 font-medium">{syncResult.inserted} bài mới</span>,{' '}
+              <span className="text-blue-400 font-medium">{syncResult.updated} bài cập nhật</span>
+            </p>
+            {syncResult.errorSummary && (
+              <p className="text-xs text-red-400 mt-1">⚠ {syncResult.errorSummary}</p>
+            )}
+          </div>
           {syncResult.sheetUrl && (
             <a
               href={syncResult.sheetUrl}
