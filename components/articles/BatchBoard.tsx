@@ -22,7 +22,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
   const [articles, setArticles] = useState<Article[]>(initialArticles);
   const [exporting, setExporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ inserted: number; updated: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ inserted: number; updated: number; errorSummary?: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkSkipping, setBulkSkipping] = useState(false);
@@ -242,7 +242,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
 
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Sync thất bại');
-      setSyncResult({ inserted: json.inserted, updated: json.updated });
+      setSyncResult({ inserted: json.inserted, updated: json.updated, errorSummary: json.error_summary });
       if (json.sheetUrl && sheetUrl) window.open(json.sheetUrl, '_blank');
     } catch (e) {
       alert((e as Error).message);
@@ -418,11 +418,16 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
       {syncResult && (
         <div className="mb-3 shrink-0 bg-blue-950/50 border border-blue-800 rounded-xl px-4 py-2.5 flex items-center gap-3 text-sm">
           <RefreshCw size={14} className="text-blue-400" />
-          <span className="text-blue-300">
-            Sync xong: <strong>{syncResult.inserted}</strong> bài mới, <strong>{syncResult.updated}</strong> bài cập nhật
-          </span>
+          <div className="flex-1">
+            <span className="text-blue-300">
+              Sync xong: <strong>{syncResult.inserted}</strong> bài mới, <strong>{syncResult.updated}</strong> bài cập nhật
+            </span>
+            {syncResult.errorSummary && (
+              <p className="text-xs text-red-400 mt-0.5">⚠ {syncResult.errorSummary}</p>
+            )}
+          </div>
           {sheetUrl && (
-            <a href={sheetUrl} target="_blank" className="ml-auto text-blue-400 hover:text-blue-300 flex items-center gap-1 text-xs transition-colors">
+            <a href={sheetUrl} target="_blank" className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-xs transition-colors">
               <ExternalLink size={10} /> Mở Sheet
             </a>
           )}

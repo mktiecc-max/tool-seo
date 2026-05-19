@@ -48,39 +48,54 @@ function buildOutlineText(a: Article): string {
 
 /**
  * Lấy permalink thực tế từ WP REST API cho danh sách post ID.
- * WP REST API trả về field `link` là full permalink đúng (ví dụ: https://site.com/blog/my-slug/).
+ * Dùng Basic Auth để lấy cả draft + published posts.
  */
 async function fetchWpPermalinks(
   wpUrl: string,
-  postIds: number[]
+  postIds: number[],
+  wpUsername?: string,
+  wpPassword?: string
 ): Promise<Record<number, string>> {
   const result: Record<number, string> = {};
   if (!wpUrl || postIds.length === 0) return result;
   try {
     const base = wpUrl.replace(/\/$/, '');
+    const headers: Record<string, string> = {};
+    if (wpUsername && wpPassword) {
+      headers['Authorization'] = `Basic ${Buffer.from(`${wpUsername}:${wpPassword}`).toString('base64')}`;
+    }
     const chunks: number[][] = [];
     for (let i = 0; i < postIds.length; i += 100) chunks.push(postIds.slice(i, i + 100));
     for (const chunk of chunks) {
-      const url = `${base}/wp-json/wp/v2/posts?include=${chunk.join(',')}&per_page=${chunk.length}&_fields=id,link`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) continue;
-      const posts: { id: number; link: string }[] = await res.json();
-      for (const p of posts) result[p.id] = p.link;
+      try {
+        const url = `${base}/wp-json/wp/v2/posts?include=${chunk.join(',')}&per_page=${chunk.length}&_fields=id,link&status=any`;
+        const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+        if (!res.ok) {
+          console.warn(`[sync-sheets] WP REST API returned ${res.status} for permalink lookup`);
+          continue;
+        }
+        const posts: { id: number; link: string }[] = await res.json();
+        for (const p of posts) result[p.id] = p.link;
+      } catch (chunkErr) {
+        console.warn('[sync-sheets] WP permalink chunk fetch failed:', chunkErr);
+      }
     }
-  } catch { /* silent fail — sẽ fallback về slug */ }
+  } catch (err) {
+    console.warn('[sync-sheets] fetchWpPermalinks failed:', err);
+  }
   return result;
 }
 
 function buildFrontLink(a: Article, wpUrl: string, wpPermalinks: Record<number, string>): string {
-  // 1. Ưu tiên: permalink thực tế từ WP REST API
+  // 1. slug lưu trong DB — nếu là full URL thì dùng luôn (publish route đã lưu full WP URL)
+  if (a.slug?.startsWith('http')) return a.slug;
+  // 2. Permalink thực tế từ WP REST API (có auth, lấy được cả draft)
   if (a.wp_post_id && wpPermalinks[a.wp_post_id]) {
     return wpPermalinks[a.wp_post_id];
   }
-  // 2. slug lưu trong DB — nếu là full URL thì dùng luôn
-  if (a.slug?.startsWith('http')) return a.slug;
-  // 3. slug là path ngắn — ghép với wpUrl
+  // 3. slug ngắn — ghép với wpUrl
   if (a.slug) return `${wpUrl.replace(/\/$/, '')}/${a.slug.replace(/^\//, '')}`;
-  // 4. Fallback: ?p=ID (biết rõ đây là chưa có permalink)
+  // 4. Fallback cuối cùng: ?p=ID
   if (a.wp_post_id && wpUrl) return `${wpUrl.replace(/\/$/, '')}/?p=${a.wp_post_id}`;
   return '';
 }
@@ -93,7 +108,7 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
   const title = a.meta_title || a.outline?.h1 || a.keyword || '';
   const displayLink = buildFrontLink(a, wpUrl, wpPermalinks);
 
-  // Resolve category name from WP category ID (ếu có)
+  // Resolve category name from WP category ID (nếu có)
   let categoryName = '';
   const catId = (a as unknown as Record<string, unknown>).wp_category_id as number | undefined;
   if (catId && categories[catId]) {
@@ -179,13 +194,15 @@ export async function POST(req: NextRequest) {
     // Extract toolUrl (origin) from the request URL
     const toolUrl = new URL(req.url).origin;
 
-    // ── 4. Read WP URL from settings ────────────────────────────────────
+    // ── 4. Read WP URL + credentials from settings ──────────────────────
     const { data: settingsData } = await db
       .from('settings')
-      .select('wp_url')
+      .select('wp_url, wp_username, wp_app_password')
       .limit(1)
       .single();
     const wpUrl = settingsData?.wp_url || process.env.WP_URL || process.env.NEXT_PUBLIC_WP_URL || '';
+    const wpUsername = settingsData?.wp_username || process.env.WP_USERNAME || '';
+    const wpPassword = settingsData?.wp_app_password || process.env.WP_APP_PASSWORD || '';
 
     // ── 5. Fetch WP categories (optional, non-blocking) ─────────────────
     let wpCategories: Record<number, string> = {};
@@ -219,11 +236,12 @@ export async function POST(req: NextRequest) {
       existingRows[0] = HEADER_ROW;
     }
 
-    // ── 7. Fetch WP permalinks (real links from WP REST API) ─────────────
+    // ── 7. Fetch WP permalinks (real links from WP REST API, with auth) ────
     const postIds = articles
       .map((a) => a.wp_post_id)
       .filter((id): id is number => !!id);
-    const wpPermalinks = await fetchWpPermalinks(wpUrl, postIds);
+    const wpPermalinks = await fetchWpPermalinks(wpUrl, postIds, wpUsername, wpPassword);
+    console.log(`[sync-sheets] WP permalinks fetched: ${Object.keys(wpPermalinks).length}/${postIds.length} posts`);
 
     // ── 8. Sync each article ────────────────────────────────────────────
     let inserted = 0;
