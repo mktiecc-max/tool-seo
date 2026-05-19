@@ -16,9 +16,10 @@ export function isProcessing(status: string): boolean {
 
 // ── Image sizes ──────────────────────────────────────────────────────────────
 export const IMAGE_SIZES = [
-  { value: '1024x1024', label: 'Vuông',  sub: '1:1 · Blog / Social',       icon: '■', aspect: 'aspect-square' },
-  { value: '1792x1024', label: 'Ngang',  sub: '16:9 · Banner / Thumbnail', icon: '▬', aspect: 'aspect-video' },
-  { value: '1024x1792', label: 'Dọc',   sub: '9:16 · Story / Poster',     icon: '▮', aspect: 'aspect-[9/16]' },
+  { value: '1024x1024', label: 'Vuông',    sub: '1:1 · Blog / Social',          icon: '■', aspect: 'aspect-square' },
+  { value: '1792x1024', label: 'Ngang',    sub: '16:9 · Banner / Thumbnail',    icon: '▬', aspect: 'aspect-video' },
+  { value: '1800x945',  label: '1800×945', sub: '~16:9 · Featured Image Blog',  icon: '▬', aspect: 'aspect-video' },
+  { value: '1024x1792', label: 'Dọc',     sub: '9:16 · Story / Poster',        icon: '▮', aspect: 'aspect-[9/16]' },
 ] as const;
 
 export type ImageSizeValue = typeof IMAGE_SIZES[number]['value'];

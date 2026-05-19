@@ -117,6 +117,7 @@ export async function generateImageGPTImage1(
   const sizeMap: Record<string, GptSize> = {
     '1792x1024': '1536x1024',
     '1024x1792': '1024x1536',
+    '1800x945':  '1536x1024', // closest 16:9 for gpt-image-1
     '1024x1024': '1024x1024',
   };
   const imageSize: GptSize = sizeMap[size || '1792x1024'] || '1536x1024';
@@ -184,12 +185,15 @@ export async function generateImageOpenAI(
   }
 
   // All gpt-image-* and chatgpt-image-latest models
+  // gpt-image-2 family supports flexible/custom sizes — pass 1800x945 directly
+  const gptImage2Models = ['gpt-image-2', 'gpt-image-2-2026-04-21', 'chatgpt-image-latest'];
   const sizeMap: Record<string, string> = {
-    '1792x1024': '1536x1024',
-    '1024x1792': '1024x1536',
+    '1792x1024': gptImage2Models.includes(modelId) ? '1792x1024' : '1536x1024',
+    '1800x945':  gptImage2Models.includes(modelId) ? '1800x945'  : '1536x1024',
+    '1024x1792': gptImage2Models.includes(modelId) ? '1024x1792' : '1024x1536',
     '1024x1024': '1024x1024',
   };
-  const imageSize = sizeMap[size || '1792x1024'] || '1536x1024';
+  const imageSize = sizeMap[size || '1792x1024'] || (gptImage2Models.includes(modelId) ? '1792x1024' : '1536x1024');
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response = await (client.images.generate as any)({
@@ -234,6 +238,7 @@ export async function generateImageFromReference(
   const sizeMap: Record<string, GptImgSize> = {
     '1792x1024': '1536x1024',
     '1024x1792': '1024x1536',
+    '1800x945':  '1536x1024', // closest 16:9 for gpt-image-1 edit
     '1024x1024': '1024x1024',
   };
   const imageSize: GptImgSize = sizeMap[size || '1792x1024'] || '1536x1024';
