@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Article } from '@/types';
 import {
   Loader2, RefreshCw, AlertCircle, Image as ImageIcon,
   FileJson, ChevronDown, ChevronUp, Wand2, Copy, Check,
-  Download, LayoutTemplate,
+  Download, LayoutTemplate, Square,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { validateBannerJSON, type BannerDesignJSON } from '@/lib/banner-design';
@@ -98,6 +98,16 @@ export default function BannerGenerator({ article, onImageGenerated }: Props) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setGenerating(false);
+    setError('⛔ Đã dừng tạo banner.');
+  };
 
   useEffect(() => {
     fetchImageModels().then((models) => {
@@ -143,6 +153,8 @@ export default function BannerGenerator({ article, onImageGenerated }: Props) {
     const bannerJSON = parseJSON();
     if (!bannerJSON) return;
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setGenerating(true);
     setError('');
     setImageUrl('');
@@ -162,6 +174,7 @@ export default function BannerGenerator({ article, onImageGenerated }: Props) {
             dong_3: dong3.trim() || undefined,
           },
         }),
+        signal: controller.signal,
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
@@ -169,8 +182,10 @@ export default function BannerGenerator({ article, onImageGenerated }: Props) {
       setPromptUsed(json.prompt_used || '');
       onImageGenerated?.(json.image_url);
     } catch (e: unknown) {
+      if ((e as Error).name === 'AbortError') return; // user cancelled
       setError((e as Error).message);
     } finally {
+      abortControllerRef.current = null;
       setGenerating(false);
     }
   };
@@ -334,18 +349,29 @@ export default function BannerGenerator({ article, onImageGenerated }: Props) {
         </div>
       </div>
 
-      {/* Generate button */}
-      <button
-        onClick={handleGenerate}
-        disabled={generating}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/20"
-      >
-        {generating ? (
-          <><Loader2 size={15} className="animate-spin" />Đang tạo banner... (30-60s)</>
-        ) : (
-          <><Wand2 size={15} />Tạo Banner SEO</>
-        )}
-      </button>
+      {/* Generate / Stop button */}
+      {generating ? (
+        <div className="space-y-3">
+          <div className="w-full flex items-center justify-center gap-3 py-3 bg-gray-900 border border-gray-700 rounded-xl">
+            <Loader2 size={15} className="animate-spin text-violet-400" />
+            <span className="text-sm text-gray-400">Đang tạo banner... (30–60s)</span>
+          </div>
+          <button
+            onClick={stopGeneration}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-600/20 hover:bg-red-600/40 border border-red-600/50 text-red-400 hover:text-red-300 text-sm font-semibold rounded-xl transition-all"
+          >
+            <Square size={13} fill="currentColor" />
+            Dừng tạo banner
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handleGenerate}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/20"
+        >
+          <Wand2 size={15} />Tạo Banner SEO
+        </button>
+      )}
 
       {/* Error */}
       {error && (

@@ -5,7 +5,7 @@ import { useDropzone } from 'react-dropzone';
 import { Article } from '@/types';
 import {
   Loader2, RefreshCw, Upload, CheckCircle2, AlertCircle,
-  Image as ImageIcon, Wand2, X, ArrowRight, SkipForward, LayoutTemplate,
+  Image as ImageIcon, Wand2, X, ArrowRight, SkipForward, LayoutTemplate, Square,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ImagePromptJSON } from '@/lib/prompts';
@@ -72,6 +72,16 @@ export default function Step5Image({ article, onConfirmed }: Props) {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'ai' | 'banner'>('ai');
   const promptGenerated = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setGeneratingImage(false);
+    setError('⛔ Đã dừng tạo ảnh.');
+  };
 
   // Fetch dynamic model list — d\u00f9ng fetchImageModels() t\u1eeb lib/constants (d\u00f9ng chung v\u1edbi BatchCard)
   useEffect(() => {
@@ -125,6 +135,8 @@ export default function Step5Image({ article, onConfirmed }: Props) {
 
   const generateImage = async () => {
     if (!imagePrompt.trim()) { setError('Vui lòng nhập image prompt'); return; }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setGeneratingImage(true);
     setError('');
     // Only append style hint for non-photo types — photo/realistic prompts work better without forced style
@@ -140,13 +152,16 @@ export default function Step5Image({ article, onConfirmed }: Props) {
           image_ai: imageAI,
           image_size: imageSize,
         }),
+        signal: controller.signal,
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
       setImageUrl(json.image_url);
     } catch (e: unknown) {
+      if ((e as Error).name === 'AbortError') return; // user cancelled
       setError((e as Error).message);
     } finally {
+      abortControllerRef.current = null;
       setGeneratingImage(false);
     }
   };
@@ -154,6 +169,8 @@ export default function Step5Image({ article, onConfirmed }: Props) {
   const generateFromReference = async () => {
     if (!imagePrompt.trim()) { setError('Vui lòng nhập image prompt'); return; }
     if (!referenceFile) { setError('Vui lòng chọn ảnh tham chiếu'); return; }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setGeneratingImage(true);
     setError('');
     // Only append style hint for non-photo types
@@ -171,13 +188,16 @@ export default function Step5Image({ article, onConfirmed }: Props) {
           reference_image_mime: mime,
           image_size: imageSize,
         }),
+        signal: controller.signal,
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
       setImageUrl(json.image_url);
     } catch (e: unknown) {
+      if ((e as Error).name === 'AbortError') return; // user cancelled
       setError((e as Error).message);
     } finally {
+      abortControllerRef.current = null;
       setGeneratingImage(false);
     }
   };
@@ -518,30 +538,34 @@ export default function Step5Image({ article, onConfirmed }: Props) {
           </div>
         )}
 
-        {/* Generate button */}
-        <button
-          onClick={referenceMode ? generateFromReference : generateImage}
-          disabled={generatingImage || !imagePrompt.trim() || (referenceMode && !referenceFile)}
-          className={cn(
-            'flex items-center gap-2 px-6 py-2.5 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors',
-            referenceMode
-              ? 'bg-amber-600 hover:bg-amber-500'
-              : 'bg-violet-600 hover:bg-violet-500'
-          )}
-        >
-          {generatingImage ? (
-            <Loader2 size={15} className="animate-spin" />
-          ) : referenceMode ? (
-            <><Upload size={14} /><ArrowRight size={12} /><Wand2 size={14} /></>
-          ) : (
-            <ImageIcon size={15} />
-          )}
-          {generatingImage
-            ? 'Đang tạo ảnh...'
-            : referenceMode
-            ? 'Gen ảnh từ ảnh tham chiếu'
-            : `Tạo ảnh ${selectedType.label}`}
-        </button>
+        {/* Generate / Stop button */}
+        {generatingImage ? (
+          <button
+            onClick={stopGeneration}
+            className="flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl transition-colors animate-pulse"
+          >
+            <Square size={14} fill="currentColor" />
+            Dừng tạo ảnh
+          </button>
+        ) : (
+          <button
+            onClick={referenceMode ? generateFromReference : generateImage}
+            disabled={!imagePrompt.trim() || (referenceMode && !referenceFile)}
+            className={cn(
+              'flex items-center gap-2 px-6 py-2.5 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors',
+              referenceMode
+                ? 'bg-amber-600 hover:bg-amber-500'
+                : 'bg-violet-600 hover:bg-violet-500'
+            )}
+          >
+            {referenceMode ? (
+              <><Upload size={14} /><ArrowRight size={12} /><Wand2 size={14} /></>
+            ) : (
+              <ImageIcon size={15} />
+            )}
+            {referenceMode ? 'Gen ảnh từ ảnh tham chiếu' : `Tạo ảnh ${selectedType.label}`}
+          </button>
+        )}
       </div>
 
       {/* Direct upload alternative */}
@@ -567,10 +591,24 @@ export default function Step5Image({ article, onConfirmed }: Props) {
 
       {/* Loading state — chia sẻ cả 2 tab */}
       {generatingImage && !imageUrl && (
-        <div className="bg-gray-900 rounded-xl p-8 flex flex-col items-center justify-center border border-gray-700">
-          <Loader2 size={32} className="animate-spin text-violet-400 mb-3" />
-          <p className="text-sm text-gray-400">AI đang tạo ảnh...</p>
-          <p className="text-xs text-gray-600 mt-1">Có thể mất 15-30 giây</p>
+        <div className="bg-gray-900 rounded-xl p-8 flex flex-col items-center justify-center border border-gray-700 gap-4">
+          <div className="relative">
+            <Loader2 size={36} className="animate-spin text-violet-400" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-2 h-2 rounded-full bg-violet-400 animate-ping" />
+            </div>
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-400">AI đang tạo ảnh...</p>
+            <p className="text-xs text-gray-600 mt-1">Có thể mất 15–60 giây tuỳ model</p>
+          </div>
+          <button
+            onClick={stopGeneration}
+            className="flex items-center gap-2 px-5 py-2 bg-red-600/20 hover:bg-red-600/40 border border-red-600/50 text-red-400 hover:text-red-300 text-sm font-medium rounded-xl transition-all"
+          >
+            <Square size={13} fill="currentColor" />
+            Dừng tạo ảnh
+          </button>
         </div>
       )}
 

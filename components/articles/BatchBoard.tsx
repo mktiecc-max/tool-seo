@@ -5,13 +5,13 @@ import { Article } from '@/types';
 import BatchCard from './BatchCard';
 import {
   Download, CheckCircle, Clock, Loader2, Layers, Play,
-  ExternalLink, CheckSquare, Square, RefreshCw, SkipForward,
+  ExternalLink, CheckSquare, Square, RefreshCw, SkipForward, StopCircle,
 } from 'lucide-react';
 import { PROCESSING_STATUSES, REVIEW_STATUSES, DEFAULT_IMAGE_MODEL } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
 
-// Trạng thái bài có thể được chọn để bulk action
-const NON_SELECTABLE = PROCESSING_STATUSES as readonly string[];
+// Trạng thái không thể chọn — chỉ publishing mới bị khóa (generating_image được chọn để force-stop)
+const NON_SELECTABLE = ['publishing', 'generating_content'] as readonly string[];
 
 interface Props {
   initialArticles: Article[];
@@ -26,6 +26,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkSkipping, setBulkSkipping] = useState(false);
+  const [bulkResetting, setBulkResetting] = useState(false);
   // Model ảnh mặc định đọc từ settings (để bulk action dùng đúng model)
   const [defaultImageModel, setDefaultImageModel] = useState(DEFAULT_IMAGE_MODEL);
 
@@ -62,9 +63,9 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
   }, []);
 
   // ── Derived stats (memo để tránh tính lại mỗi render) ───────────────────────
-  const { stats, selectableCount, bulkRunnable, skipImageCount, outlineCount, contentCount } = useMemo(() => {
+  const { stats, selectableCount, bulkRunnable, skipImageCount, outlineCount, contentCount, resetImageCount } = useMemo(() => {
     let done = 0, inProgress = 0, review = 0, failed = 0;
-    let selectable = 0, runnable = 0, skipable = 0, outline = 0, content = 0;
+    let selectable = 0, runnable = 0, skipable = 0, outline = 0, content = 0, resetable = 0;
 
     for (const a of articles) {
       if (a.status === 'done') done++;
@@ -78,6 +79,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
         if (a.status === 'outline_review') { runnable++; outline++; }
         if (a.status === 'content_review') { runnable++; content++; }
         if (a.status === 'image_review' || a.status === 'content_review') skipable++;
+        if (a.status === 'generating_image') resetable++;
       }
     }
 
@@ -88,6 +90,7 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
       skipImageCount: skipable,
       outlineCount: outline,
       contentCount: content,
+      resetImageCount: resetable,
     };
   }, [articles, selectedIds]);
 
@@ -190,6 +193,30 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
 
     setSelectedIds(new Set());
     setBulkSkipping(false);
+  };
+
+  // Dừng (force-reset) các bài đang kẹt ở generating_image
+  const handleBulkResetImage = async () => {
+    const targets = articles.filter(
+      (a) => selectedIds.has(a.id) && a.status === 'generating_image'
+    );
+    if (targets.length === 0) return;
+    setBulkResetting(true);
+    try {
+      const res = await fetch('/api/articles/reset-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_ids: targets.map((a) => a.id) }),
+      });
+      if (!res.ok) throw new Error('Reset thất bại');
+      // Update local state immediately
+      targets.forEach((a) => handleUpdate({ ...a, status: 'image_review' }));
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setSelectedIds(new Set());
+      setBulkResetting(false);
+    }
   };
 
   // ── Sheet & CSV export ───────────────────────────────────────────────────────
@@ -362,6 +389,18 @@ export default function BatchBoard({ initialArticles, sheetUrl }: Props) {
               >
                 {bulkSkipping ? <Loader2 size={12} className="animate-spin" /> : <SkipForward size={12} />}
                 {bulkSkipping ? 'Đang đăng...' : `Bỏ qua ảnh → Đăng ${skipImageCount} bài`}
+              </button>
+            )}
+
+            {/* Dừng tạo ảnh hàng loạt */}
+            {resetImageCount > 0 && (
+              <button
+                onClick={handleBulkResetImage}
+                disabled={bulkResetting}
+                className="flex items-center gap-2 px-4 py-1.5 bg-red-900/40 hover:bg-red-800/60 disabled:opacity-40 text-red-400 hover:text-red-300 text-xs font-semibold rounded-lg border border-red-700/50 hover:border-red-600 transition-colors"
+              >
+                {bulkResetting ? <Loader2 size={12} className="animate-spin" /> : <StopCircle size={12} />}
+                {bulkResetting ? 'Đang dừng...' : `Dừng tạo ảnh ${resetImageCount} bài → Về duyệt`}
               </button>
             )}
 

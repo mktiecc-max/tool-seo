@@ -5,7 +5,7 @@ import { Article, OutlineJSON } from '@/types';
 import {
   Loader2, RefreshCw, Trash2, CheckCircle2, ChevronRight,
   FileText, ImageIcon, Globe, AlertCircle, ExternalLink, Eye, EyeOff,
-  Send, Pencil, Plus, MessageSquare, X, Sheet, SkipForward, Upload,
+  Send, Pencil, Plus, MessageSquare, X, Sheet, SkipForward, Upload, StopCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -251,6 +251,29 @@ export default function BatchCard({ article: initialArticle, selected = false, o
     }).catch((e) => setError((e as Error).message));
   };
 
+  // Force-reset article khi bị kẹt ở generating_image
+  const forceResetImage = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/articles/reset-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_ids: [article.id] }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Reset thất bại');
+      // Update local state immediately
+      const updated = { ...article, status: 'image_review' as const };
+      setArticle(updated);
+      onUpdate(updated);
+    } catch (e: unknown) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteConfirm = async () => {
     setLoading(true);
     try {
@@ -328,13 +351,26 @@ export default function BatchCard({ article: initialArticle, selected = false, o
 
       {/* Auto-processing spinner */}
       {isPolling && (
-        <div className="flex items-center gap-3 bg-blue-950/40 border border-blue-800/50 rounded-xl px-4 py-3">
-          <Loader2 size={16} className="animate-spin text-blue-400 shrink-0" />
-          <p className="text-sm text-blue-300">
-            {article.status === 'generating_content' && 'AI đang viết bài...'}
-            {article.status === 'generating_image' && 'AI đang tạo ảnh...'}
-            {article.status === 'publishing' && 'Đang đăng lên WordPress...'}
-          </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 bg-blue-950/40 border border-blue-800/50 rounded-xl px-4 py-3">
+            <Loader2 size={16} className="animate-spin text-blue-400 shrink-0" />
+            <p className="text-sm text-blue-300 flex-1">
+              {article.status === 'generating_content' && 'AI đang viết bài...'}
+              {article.status === 'generating_image' && 'AI đang tạo ảnh...'}
+              {article.status === 'publishing' && 'Đang đăng lên WordPress...'}
+            </p>
+          </div>
+          {/* Nút dừng — chỉ hiện khi đang tạo ảnh */}
+          {article.status === 'generating_image' && (
+            <button
+              onClick={forceResetImage}
+              disabled={loading}
+              className="flex items-center justify-center gap-1.5 w-full py-1.5 px-3 bg-red-900/30 hover:bg-red-800/50 disabled:opacity-50 text-red-400 hover:text-red-300 text-xs font-semibold rounded-xl border border-red-700/50 hover:border-red-600 transition-colors"
+            >
+              {loading ? <Loader2 size={11} className="animate-spin" /> : <StopCircle size={11} />}
+              Dừng → Về duyệt ảnh
+            </button>
+          )}
         </div>
       )}
 
