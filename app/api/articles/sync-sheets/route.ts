@@ -18,15 +18,17 @@ export const maxDuration = 60;
  * E = Nội dung chi tiết (HTML)
  * F = Link ảnh
  * G = Category (WordPress)
- * H = Permalink / Slug (link click vào ra bài trên trang quản trị WP)
+ * H = Permalink (link front-end bài viết)
  * I = Trạng thái
  * J = Ngày cập nhật
+ * K = Link Tool SEO
+ * L = Prompt ảnh
  */
 // SHEET_RANGE is built dynamically using getFirstSheetName()
 const HEADER_ROW = [
   'ID', 'Từ khóa', 'Tiêu đề', 'Outline',
   'Nội dung chi tiết', 'Link ảnh', 'Category',
-  'Link bài viết', 'Trạng thái', 'Ngày cập nhật', 'Link Tool SEO',
+  'Link bài viết', 'Trạng thái', 'Ngày cập nhật', 'Link Tool SEO', 'Prompt ảnh',
 ];
 
 function buildOutlineText(a: Article): string {
@@ -45,42 +47,53 @@ function buildOutlineText(a: Article): string {
 }
 
 /**
- * Tạo link trực tiếp đến trang chỉnh sửa bài trên WP Admin.
- * Ưu tiên: wp-admin/post.php?post=ID&action=edit (link luôn hoạt động)
- * Fallback: permalink hoặc ?p=ID
+ * Lấy permalink thực tế từ WP REST API cho danh sách post ID.
+ * WP REST API trả về field `link` là full permalink đúng (ví dụ: https://site.com/blog/my-slug/).
  */
-function buildWpLinks(a: Article, wpUrl: string): { editLink: string; frontLink: string } {
-  const base = wpUrl.replace(/\/$/, '');
-  let editLink = '';
-  let frontLink = '';
-
-  if (a.wp_post_id && base) {
-    // Link đến trang quản trị — click vào là chỉnh sửa luôn
-    editLink = `${base}/wp-admin/post.php?post=${a.wp_post_id}&action=edit`;
-    // Link đến front-end
-    if (a.slug?.startsWith('http')) {
-      frontLink = a.slug;
-    } else if (a.slug) {
-      frontLink = `${base}/${a.slug}`;
-    } else {
-      frontLink = `${base}/?p=${a.wp_post_id}`;
+async function fetchWpPermalinks(
+  wpUrl: string,
+  postIds: number[]
+): Promise<Record<number, string>> {
+  const result: Record<number, string> = {};
+  if (!wpUrl || postIds.length === 0) return result;
+  try {
+    const base = wpUrl.replace(/\/$/, '');
+    const chunks: number[][] = [];
+    for (let i = 0; i < postIds.length; i += 100) chunks.push(postIds.slice(i, i + 100));
+    for (const chunk of chunks) {
+      const url = `${base}/wp-json/wp/v2/posts?include=${chunk.join(',')}&per_page=${chunk.length}&_fields=id,link`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const posts: { id: number; link: string }[] = await res.json();
+      for (const p of posts) result[p.id] = p.link;
     }
-  }
-
-  return { editLink, frontLink };
+  } catch { /* silent fail — sẽ fallback về slug */ }
+  return result;
 }
 
-function articleToRow(a: Article, wpUrl: string, categories: Record<number, string>, toolUrl: string): string[] {
+function buildFrontLink(a: Article, wpUrl: string, wpPermalinks: Record<number, string>): string {
+  // 1. Ưu tiên: permalink thực tế từ WP REST API
+  if (a.wp_post_id && wpPermalinks[a.wp_post_id]) {
+    return wpPermalinks[a.wp_post_id];
+  }
+  // 2. slug lưu trong DB — nếu là full URL thì dùng luôn
+  if (a.slug?.startsWith('http')) return a.slug;
+  // 3. slug là path ngắn — ghép với wpUrl
+  if (a.slug) return `${wpUrl.replace(/\/$/, '')}/${a.slug.replace(/^\//, '')}`;
+  // 4. Fallback: ?p=ID (biết rõ đây là chưa có permalink)
+  if (a.wp_post_id && wpUrl) return `${wpUrl.replace(/\/$/, '')}/?p=${a.wp_post_id}`;
+  return '';
+}
+
+function articleToRow(a: Article, wpUrl: string, categories: Record<number, string>, toolUrl: string, wpPermalinks: Record<number, string>): string[] {
   const now = new Date().toLocaleDateString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
   const title = a.meta_title || a.outline?.h1 || a.keyword || '';
-  const { editLink, frontLink } = buildWpLinks(a, wpUrl);
-  // Theo yêu cầu: ưu tiên lấy permalink (frontLink) hoặc slug, nếu không có mới fallback về editLink
-  const displayLink = frontLink || editLink;
+  const displayLink = buildFrontLink(a, wpUrl, wpPermalinks);
 
-  // Resolve category name from WP category ID (nếu có)
+  // Resolve category name from WP category ID (ếu có)
   let categoryName = '';
   const catId = (a as unknown as Record<string, unknown>).wp_category_id as number | undefined;
   if (catId && categories[catId]) {
@@ -88,6 +101,21 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
   }
 
   const linkToolSeo = `${toolUrl}/articles/${a.id}`;
+
+  // image_prompt có thể là JSON string — parse ra để lấy dạng đọc được
+  let imagePromptText = '';
+  if (a.image_prompt) {
+    try {
+      const parsed = JSON.parse(a.image_prompt) as Record<string, string>;
+      // Nếu là JSON object: ghép các field thành text
+      imagePromptText = Object.entries(parsed)
+        .map(([k, v]) => `[${k}] ${v}`)
+        .join(' | ');
+    } catch {
+      // Plain text prompt
+      imagePromptText = a.image_prompt;
+    }
+  }
 
   return [
     a.id,
@@ -101,6 +129,7 @@ function articleToRow(a: Article, wpUrl: string, categories: Record<number, stri
     a.status ?? '',
     now,
     linkToolSeo,
+    imagePromptText,
   ];
 }
 
@@ -145,7 +174,7 @@ export async function POST(req: NextRequest) {
 
     // Auto-detect tên sheet đầu tiên (Sheet1, Trang tính1, v.v.)
     const sheetName = await getFirstSheetName();
-    const SHEET_RANGE = `'${sheetName}'!A:K`;
+    const SHEET_RANGE = `'${sheetName}'!A:L`;
 
     // Extract toolUrl (origin) from the request URL
     const toolUrl = new URL(req.url).origin;
@@ -185,19 +214,25 @@ export async function POST(req: NextRequest) {
       existingRows = [HEADER_ROW];
     } else if (existingRows[0]?.[0] !== 'ID' || existingRows[0].length < HEADER_ROW.length) {
       // Header cũ (từ phiên bản cũ) — ghi đè header mới
-      await sheetsUpdate(`${sheetName}!A1:K1`, [HEADER_ROW]);
+      await sheetsUpdate(`${sheetName}!A1:L1`, [HEADER_ROW]);
       // Cập nhật lại row 0 trong existingRows bằng HEADER_ROW để tránh lỗi lúc so sánh
       existingRows[0] = HEADER_ROW;
     }
 
-    // ── 7. Sync each article ────────────────────────────────────────────
+    // ── 7. Fetch WP permalinks (real links from WP REST API) ─────────────
+    const postIds = articles
+      .map((a) => a.wp_post_id)
+      .filter((id): id is number => !!id);
+    const wpPermalinks = await fetchWpPermalinks(wpUrl, postIds);
+
+    // ── 8. Sync each article ────────────────────────────────────────────
     let inserted = 0;
     let updated = 0;
     const errors: string[] = [];
 
     for (const article of articles) {
       try {
-        const newRow = articleToRow(article, wpUrl, wpCategories, toolUrl);
+        const newRow = articleToRow(article, wpUrl, wpCategories, toolUrl, wpPermalinks);
 
         // Match by ID (cột A, index 0) — unique, không bị trùng keyword
         let matchRowIndex = -1;
@@ -211,7 +246,7 @@ export async function POST(req: NextRequest) {
 
         if (matchRowIndex >= 0) {
           const sheetRow = matchRowIndex + 1; // 1-indexed
-          await sheetsUpdate(`'${sheetName}'!A${sheetRow}:K${sheetRow}`, [newRow]);
+          await sheetsUpdate(`'${sheetName}'!A${sheetRow}:L${sheetRow}`, [newRow]);
           existingRows[matchRowIndex] = newRow;
           updated++;
         } else {
